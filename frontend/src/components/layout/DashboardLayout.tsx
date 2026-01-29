@@ -10,12 +10,17 @@ interface NavItem {
   label: string;
 }
 
+console.log("DashboardLayout rendered");
+
 // Role-specific dashboard items
 const dashboardItems: Record<string, NavItem[]> = {
   PLAYER: [
     { to: "/player", icon: "fas fa-home", label: "Dashboard" },
     { to: "/library", icon: "fas fa-video", label: "Library" },
     { to: "/requests", icon: "fas fa-comment-dots", label: "Requests" },
+    { to: "/stats", icon: "fas fa-chart-bar", label: "Stats" },
+    { to: "/matches", icon: "fas fa-calendar", label: "Matches" },
+    { to: "/notifications", icon: "fas fa-bell", label: "Notifications" },
     { to: "/settings", icon: "fas fa-cog", label: "Settings" },
   ],
   COACH: [
@@ -116,17 +121,16 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
       <AnimatePresence>
         <motion.aside
           initial={{ x: -280 }}
-          animate={{ x: sidebarOpen ? 0 : -280 }}
+          animate={{ x: sidebarOpen || window.innerWidth >= 1024 ? 0 : -280 }}
           className={`
             fixed top-0 left-0 z-40 h-screen w-72 glass border-r border-white/10
             lg:translate-x-0 lg:block
           `}
-          style={{ transform: 'none' }}
         >
           <div className="hidden lg:block">
             {/* Keep sidebar always visible on desktop */}
           </div>
-          
+
           {/* Desktop sidebar content */}
           <div className="h-full flex flex-col">
             {/* Logo */}
@@ -142,7 +146,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
 
             {/* User Info */}
             <div className="p-4 mt-16 lg:mt-0 border-b border-white/10">
-              <motion.div 
+              <motion.div
                 whileHover={{ scale: 1.02 }}
                 className="glass rounded-2xl p-4 border border-white/10 cursor-pointer"
               >
@@ -176,20 +180,18 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
                     end={item.label === "Dashboard"}
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
-                        isActive
-                          ? "bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-white/20"
-                          : "text-white/60 hover:text-white hover:bg-white/5 border border-transparent"
+                      `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${isActive
+                        ? "bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-white/20"
+                        : "text-white/60 hover:text-white hover:bg-white/5 border border-transparent"
                       }`
                     }
                   >
                     {({ isActive }) => (
                       <>
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-300 ${
-                          isActive 
-                            ? 'bg-gradient-to-r from-blue-500 to-purple-600' 
-                            : 'bg-white/10 group-hover:bg-white/20'
-                        }`}>
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-300 ${isActive
+                          ? 'bg-gradient-to-r from-blue-500 to-purple-600'
+                          : 'bg-white/10 group-hover:bg-white/20'
+                          }`}>
                           <i className={`${item.icon} text-sm ${isActive ? 'text-white' : 'text-white/60 group-hover:text-white'}`}></i>
                         </div>
                         <span className="font-medium">{item.label}</span>
@@ -236,7 +238,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               onClick={() => setSidebarOpen(false)}
               className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"
             />
-            
+
             {/* Mobile Sidebar */}
             <motion.aside
               initial={{ x: -288 }}
@@ -285,20 +287,18 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
                       end={item.label === "Dashboard"}
                       onClick={() => setSidebarOpen(false)}
                       className={({ isActive }) =>
-                        `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
-                          isActive
-                            ? "bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-white/20"
-                            : "text-white/60 hover:text-white hover:bg-white/5"
+                        `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${isActive
+                          ? "bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-white/20"
+                          : "text-white/60 hover:text-white hover:bg-white/5"
                         }`
                       }
                     >
                       {({ isActive }) => (
                         <>
-                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                            isActive 
-                              ? 'bg-gradient-to-r from-blue-500 to-purple-600' 
-                              : 'bg-white/10'
-                          }`}>
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isActive
+                            ? 'bg-gradient-to-r from-blue-500 to-purple-600'
+                            : 'bg-white/10'
+                            }`}>
                             <i className={`${item.icon} text-sm ${isActive ? 'text-white' : 'text-white/60'}`}></i>
                           </div>
                           <span className="font-medium">{item.label}</span>
@@ -328,7 +328,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
 
       {/* Main Content */}
       <main className="lg:ml-72 pt-16 lg:pt-0 min-h-screen relative z-10">
-        <div className="p-6 lg:p-8">
+        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
           {children || <Outlet />}
         </div>
       </main>
