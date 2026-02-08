@@ -112,25 +112,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
         </div>
       </header>
 
-      {/* Sidebar */}
-      <AnimatePresence>
-        <motion.aside
-          initial={{ x: -280 }}
-          animate={{ x: sidebarOpen ? 0 : -280 }}
-          className={`
-            fixed top-0 left-0 z-40 h-screen w-72 glass border-r border-white/10
-            lg:translate-x-0 lg:block
-          `}
-          style={{ transform: 'none' }}
-        >
-          <div className="hidden lg:block">
-            {/* Keep sidebar always visible on desktop */}
-          </div>
-          
-          {/* Desktop sidebar content */}
+      {/* Desktop Sidebar - Always Visible */}
+      <aside className="hidden lg:block fixed top-0 left-0 z-40 h-screen w-72 glass border-r border-white/10">
           <div className="h-full flex flex-col">
             {/* Logo */}
-            <div className="hidden lg:flex items-center gap-3 p-6 border-b border-white/10">
+            <div className="flex items-center gap-3 p-6 border-b border-white/10">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center pulse-glow">
                 <i className="fas fa-cricket-bat-ball text-white"></i>
               </div>
@@ -141,7 +127,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
             </div>
 
             {/* User Info */}
-            <div className="p-4 mt-16 lg:mt-0 border-b border-white/10">
+            <div className="p-4 border-b border-white/10">
               <motion.div 
                 whileHover={{ scale: 1.02 }}
                 className="glass rounded-2xl p-4 border border-white/10 cursor-pointer"
@@ -221,10 +207,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               </motion.button>
             </div>
           </div>
-        </motion.aside>
-      </AnimatePresence>
+      </aside>
 
-      {/* Mobile sidebar */}
+      {/* Mobile Sidebar */}
       <AnimatePresence>
         {sidebarOpen && (
           <>
