@@ -66,10 +66,30 @@ export default function CoachDashboard() {
 
   const myAthletes = useMemo(
     () => [
-      { name: "Alex Rodriguez", sport: "Batsman", level: "Advanced", progress: 85, lastSession: "2 hours ago", status: "Active" },
-      { name: "Maya Patel", sport: "Bowler", level: "Intermediate", progress: 72, lastSession: "1 day ago", status: "Active" },
-      { name: "James Wilson", sport: "All-rounder", level: "Beginner", progress: 58, lastSession: "3 days ago", status: "Needs Attention" },
-      { name: "Sofia Chen", sport: "Wicketkeeper", level: "Advanced", progress: 91, lastSession: "5 hours ago", status: "Excellent" },
+      { id: "1", name: "Alex Rodriguez", sport: "Batsman", level: "Advanced", progress: 85, lastSession: "2 hours ago", status: "Active" },
+      { id: "2", name: "Maya Patel", sport: "Bowler", level: "Intermediate", progress: 72, lastSession: "1 day ago", status: "Active" },
+      { id: "3", name: "James Wilson", sport: "All-rounder", level: "Beginner", progress: 58, lastSession: "3 days ago", status: "Needs Attention" },
+      { id: "4", name: "Sofia Chen", sport: "Wicketkeeper", level: "Advanced", progress: 91, lastSession: "5 hours ago", status: "Excellent" },
+    ],
+    []
+  );
+
+  const trainingSessions = useMemo(
+    () => [
+      { id: 1, title: "Batting Practice", athlete: "Alex Rodriguez", date: "Today", time: "10:00 AM", status: "Present" },
+      { id: 2, title: "Bowling Drills", athlete: "Maya Patel", date: "Today", time: "2:00 PM", status: "Pending" },
+      { id: 3, title: "Fitness Training", athlete: "James Wilson", date: "Tomorrow", time: "9:00 AM", status: "Pending" },
+      { id: 4, title: "Wicketkeeping", athlete: "Sofia Chen", date: "Tomorrow", time: "11:00 AM", status: "Pending" },
+    ],
+    []
+  );
+
+  const leaderboard = useMemo(
+    () => [
+      { rank: 1, name: "Sofia Chen", score: 91, improvement: "+12%", badge: "🥇" },
+      { rank: 2, name: "Alex Rodriguez", score: 85, improvement: "+8%", badge: "🥈" },
+      { rank: 3, name: "Maya Patel", score: 72, improvement: "+15%", badge: "🥉" },
+      { rank: 4, name: "James Wilson", score: 58, improvement: "+18%", badge: "⭐" },
     ],
     []
   );
@@ -156,7 +176,7 @@ export default function CoachDashboard() {
             </div>
           </div>
 
-          <div className="h-72">
+          <div className="h-72" style={{ minHeight: '288px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={athleteProgress}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
@@ -195,7 +215,7 @@ export default function CoachDashboard() {
             </div>
           </div>
 
-          <div className="h-64">
+          <div className="h-64" style={{ minHeight: '256px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={skillsRadar}>
                 <PolarGrid stroke="rgba(255,255,255,0.2)" />
@@ -247,6 +267,97 @@ export default function CoachDashboard() {
         </div>
       </motion.div>
 
+      {/* Training Schedule & Leaderboard */}
+      <div className="grid lg:grid-cols-2 gap-6 mb-8">
+        {/* Training Schedule */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6 }}
+          className="glass rounded-3xl p-6 border border-white/20"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center">
+              <i className="fas fa-calendar-alt text-white"></i>
+            </div>
+            <div>
+              <p className="font-semibold text-lg">Training Schedule</p>
+              <p className="text-sm text-white/60">Upcoming sessions</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {trainingSessions.map((session, i) => (
+              <motion.div
+                key={session.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="glass rounded-xl p-4 border border-white/10 hover:border-blue-500/30 transition-all"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-medium">{session.title}</p>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    session.status === 'Present' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
+                  }`}>
+                    {session.status}
+                  </span>
+                </div>
+                <p className="text-sm text-white/60 mb-2">{session.athlete}</p>
+                <div className="flex items-center gap-4 text-xs text-white/50">
+                  <span><i className="fas fa-calendar mr-1"></i>{session.date}</span>
+                  <span><i className="fas fa-clock mr-1"></i>{session.time}</span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* Leaderboard */}
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6 }}
+          className="glass rounded-3xl p-6 border border-white/20"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 flex items-center justify-center">
+              <i className="fas fa-trophy text-white"></i>
+            </div>
+            <div>
+              <p className="font-semibold text-lg">Leaderboard</p>
+              <p className="text-sm text-white/60">Top performers this month</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {leaderboard.map((player, i) => (
+              <motion.div
+                key={player.rank}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="glass rounded-xl p-4 border border-white/10 hover:border-yellow-500/30 transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{player.badge}</span>
+                    <div>
+                      <p className="font-medium">{player.name}</p>
+                      <p className="text-xs text-white/60">Rank #{player.rank}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-yellow-400">{player.score}</p>
+                    <p className="text-xs text-green-400">{player.improvement}</p>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+
       {/* My Athletes */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -266,13 +377,18 @@ export default function CoachDashboard() {
 
         <div className="space-y-3">
           {myAthletes.map((athlete, i) => (
-            <motion.div
+            <Link
               key={i}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="glass rounded-2xl p-4 border border-white/10 hover:border-white/20 transition-all duration-300 group"
+              to={`/coach/player/${athlete.id}`}
+              className="block"
             >
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.1 }}
+                whileHover={{ scale: 1.02 }}
+                className="glass rounded-2xl p-4 border border-white/10 hover:border-blue-500/50 transition-all duration-300 group cursor-pointer"
+              >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
@@ -315,7 +431,8 @@ export default function CoachDashboard() {
                   }`}
                 />
               </div>
-            </motion.div>
+              </motion.div>
+            </Link>
           ))}
         </div>
       </motion.div>
