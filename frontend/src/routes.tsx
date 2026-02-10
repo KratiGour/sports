@@ -18,6 +18,7 @@ import HighlightsPage from './pages/HighlightsPage';
 import VideoDetailPage from './pages/VideoDetailPage';
 import RequestsPage from './pages/RequestsPage';
 import ProfilePage from './pages/ProfilePage';
+import PlayerPerformance from './pages/PlayerPerformance';
 
 // ============ Auth Initializer (runs once on module load) ============
 let authInitialized = false;
@@ -139,6 +140,7 @@ export default function AppRouter() {
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/settings" element={<ProfilePage />} />
             <Route path="/player" element={<PlayerDashboard />} />
+            <Route path="/player/:id" element={<PlayerPerformance />} />
           </Route>
         </Route>
         
@@ -148,6 +150,7 @@ export default function AppRouter() {
             <Route element={<DashboardLayout />}>
               <Route path="/coach" element={<CoachDashboard />} />
               <Route path="/coach/upload" element={<UploadPage />} />
+              <Route path="/coach/player/:id" element={<PlayerPerformance />} />
             </Route>
           </Route>
         </Route>
