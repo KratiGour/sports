@@ -1,6 +1,5 @@
 import cv2
-import mediapipe.python.solutions.pose as mp_pose
-import mediapipe.python.solutions.drawing_utils as mp_drawing
+import mediapipe as mp
 import numpy as np
 import os
 import time
@@ -10,6 +9,10 @@ from dotenv import load_dotenv
 from PIL import Image
 from fpdf import FPDF
 import io
+
+# MediaPipe solutions
+mp_pose = mp.solutions.pose
+mp_drawing = mp.solutions.drawing_utils
 
 # ==========================================
 # CONFIGURATION & ENVIRONMENT
