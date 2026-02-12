@@ -141,7 +141,7 @@ def db_health_check():
 
 # ============ Include API Routers ============
 
-from api.routes import auth, videos, jobs, requests, bowling
+from api.routes import auth, videos, jobs, requests, bowling, BOWLING_AVAILABLE
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
@@ -155,8 +155,12 @@ app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
 # Match request/voting routes
 app.include_router(requests.router, prefix="/api/v1", tags=["requests"])
 
-# Bowling Analysis routes
-app.include_router(bowling.router, prefix="/api/v1/bowling", tags=["bowling"])
+# Bowling Analysis routes (optional - requires MediaPipe)
+if BOWLING_AVAILABLE and bowling is not None:
+    app.include_router(bowling.router, prefix="/api/v1/bowling", tags=["bowling"])
+    logger.info("✓ Bowling analysis feature enabled")
+else:
+    logger.warning("✗ Bowling analysis feature disabled (MediaPipe not available)")
 
 
 # ============ Entry Point ============

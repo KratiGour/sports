@@ -1,23 +1,4 @@
 import cv2
-try:
-    # Try new MediaPipe API (v0.10+)
-    from mediapipe.python.solutions import pose as mp_pose_module
-    from mediapipe.python.solutions import drawing_utils as mp_drawing_module
-    from mediapipe.python.solutions.pose import PoseLandmark
-    from mediapipe.python.solutions.drawing_styles import get_default_pose_landmarks_style
-    POSE_CONNECTIONS = mp_pose_module.POSE_CONNECTIONS
-except ImportError:
-    # Fall back to old API (pre-v0.10)
-    import mediapipe as mp
-    mp_pose_module = mp.solutions.pose
-    mp_drawing_module = mp.solutions.drawing_utils
-    PoseLandmark = mp.solutions.pose.PoseLandmark
-    POSE_CONNECTIONS = mp.solutions.pose.POSE_CONNECTIONS
-    try:
-        from mediapipe.python.solutions.drawing_styles import get_default_pose_landmarks_style
-    except ImportError:
-        get_default_pose_landmarks_style = None
-
 import numpy as np
 import os
 import time
@@ -27,6 +8,61 @@ from dotenv import load_dotenv
 from PIL import Image
 from fpdf import FPDF
 import io
+
+# MediaPipe imports with comprehensive fallback strategy
+mp_pose_module = None
+mp_drawing_module = None
+POSE_CONNECTIONS = None
+import_strategy_used = None
+
+# Strategy 1: Try mediapipe.solutions (most common for v0.8-0.9)
+try:
+    import mediapipe.solutions.pose as mp_pose_module_temp
+    import mediapipe.solutions.drawing_utils as mp_drawing_module_temp
+    from mediapipe.solutions.pose import POSE_CONNECTIONS as POSE_CONN_TEMP
+    mp_pose_module = mp_pose_module_temp
+    mp_drawing_module = mp_drawing_module_temp
+    POSE_CONNECTIONS = POSE_CONN_TEMP
+    import_strategy_used = "mediapipe.solutions (v0.8-0.9)"
+except (ImportError, AttributeError) as e:
+    pass
+
+# Strategy 2: Try mediapipe.python.solutions (v0.10+)
+if mp_pose_module is None:
+    try:
+        from mediapipe.python.solutions import pose as mp_pose_module_temp
+        from mediapipe.python.solutions import drawing_utils as mp_drawing_module_temp
+        from mediapipe.python.solutions.pose import POSE_CONNECTIONS as POSE_CONN_TEMP
+        mp_pose_module = mp_pose_module_temp
+        mp_drawing_module = mp_drawing_module_temp
+        POSE_CONNECTIONS = POSE_CONN_TEMP
+        import_strategy_used = "mediapipe.python.solutions (v0.10+)"
+    except (ImportError, AttributeError) as e:
+        pass
+
+# Strategy 3: Try base mediapipe import with attribute access
+if mp_pose_module is None:
+    try:
+        import mediapipe as mp
+        if hasattr(mp, 'solutions'):
+            mp_pose_module = mp.solutions.pose
+            mp_drawing_module = mp.solutions.drawing_utils
+            POSE_CONNECTIONS = mp.solutions.pose.POSE_CONNECTIONS
+            import_strategy_used = "mediapipe base import with .solutions"
+    except (ImportError, AttributeError) as e:
+        pass
+
+# Final check
+if mp_pose_module is None or mp_drawing_module is None:
+    raise ImportError(
+        "Unable to import MediaPipe. Tried multiple import strategies:\n"
+        "1. mediapipe.solutions.pose (v0.8-0.9)\n"
+        "2. mediapipe.python.solutions (v0.10+)\n"
+        "3. mediapipe base import\n"
+        "Please ensure mediapipe>=0.10.0 is installed correctly."
+    )
+else:
+    print(f"✓ MediaPipe loaded successfully using: {import_strategy_used}")
 
 # ==========================================
 # CONFIGURATION & ENVIRONMENT
