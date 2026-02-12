@@ -40,3 +40,8 @@ mediapipe>=0.10.0            # Pose estimation for striker identification
 torch>=2.0.0                 # TSM action recognition backbone
 torchvision>=0.15.0          # Vision models and transforms
 scipy>=1.11.0                # Audio FFT analysis
+
+# Bowling Analysis
+google-genai>=0.6.0
+fpdf2>=2.7.0
+Pillow>=10.0.0

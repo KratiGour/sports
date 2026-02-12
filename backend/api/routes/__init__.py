@@ -7,7 +7,7 @@ Routes:
 - jobs: OCR processing job management
 - requests: Match request voting system
 """
-from . import auth, videos, jobs, requests
+from . import auth, videos, jobs, requests, bowling
 
 __all__ = ["auth", "videos", "jobs", "requests"]
 

@@ -274,6 +274,32 @@ export const requestsApi = {
     }),
 };
 
+// Bowling Analysis endpoints
+export const bowlingApi = {
+  /** Upload video and run biomechanics analysis */
+  analyze: (file: File, onProgress?: (progress: number) => void) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/bowling/analyze', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000, // 5 min — video processing is heavy
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
+        }
+      },
+    });
+  },
+
+  /** List current user's past analyses */
+  history: (limit = 20, offset = 0) =>
+    api.get('/bowling/history', { params: { limit, offset } }),
+
+  /** Fetch single analysis by ID */
+  getById: (analysisId: string) =>
+    api.get(`/bowling/${analysisId}`),
+};
+
 export default api;
 
 
