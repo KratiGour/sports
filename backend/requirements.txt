@@ -34,3 +34,9 @@ opencv-python-headless>=4.8.1  # Video analysis (headless for server - no GUI de
 # Machine Learning & OCR
 numpy>=1.26.2
 easyocr>=1.7.0               # OCR text recognition
+
+# Multi-Modal Detection (Optional - for 99% accuracy mode)
+mediapipe>=0.10.0            # Pose estimation for striker identification
+torch>=2.0.0                 # TSM action recognition backbone
+torchvision>=0.15.0          # Vision models and transforms
+scipy>=1.11.0                # Audio FFT analysis

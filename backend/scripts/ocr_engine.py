@@ -16,6 +16,7 @@ import json
 import logging
 import argparse
 import subprocess
+
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from collections import deque
@@ -35,15 +36,17 @@ class ScoreboardConfig:
     DEFAULTS = {
         'score': {'x': 140, 'y': 620, 'width': 100, 'height': 50},
         'overs': {'x': 140, 'y': 670, 'width': 60, 'height': 30},
+        'batsman_name': {'x': 274, 'y': 620, 'width': 535, 'height': 40},  # Calibrated: HD overlay
     }
 
     def __init__(self, config_file: Optional[str] = None):
         self._load_config(config_file)
         self.use_gpu = False
-        self.start_time = 0.0
+        # start_time can be set from config or CLI
 
     def _load_config(self, config_file: Optional[str]):
         """Load from file or use calibrated defaults."""
+        self.suggested_start_time = None  # Default
         if config_file and Path(config_file).exists():
             with open(config_file, 'r') as f:
                 cfg = json.load(f)
@@ -55,6 +58,14 @@ class ScoreboardConfig:
             self.overs_roi_y = cfg.get('overs_roi_y', self.DEFAULTS['overs']['y'])
             self.overs_roi_width = cfg.get('overs_roi_width', self.DEFAULTS['overs']['width'])
             self.overs_roi_height = cfg.get('overs_roi_height', self.DEFAULTS['overs']['height'])
+            # Batsman name ROI
+            self.batsman_roi_x = cfg.get('batsman_roi_x', self.DEFAULTS['batsman_name']['x'])
+            self.batsman_roi_y = cfg.get('batsman_roi_y', self.DEFAULTS['batsman_name']['y'])
+            self.batsman_roi_width = cfg.get('batsman_roi_width', self.DEFAULTS['batsman_name']['width'])
+            self.batsman_roi_height = cfg.get('batsman_roi_height', self.DEFAULTS['batsman_name']['height'])
+            # Suggested start time from auto-calibration
+            self.suggested_start_time = cfg.get('suggested_start_time', None)
+            self.start_time = float(self.suggested_start_time) if self.suggested_start_time else 0.0
         else:
             self.roi_x = self.DEFAULTS['score']['x']
             self.roi_y = self.DEFAULTS['score']['y']
@@ -64,18 +75,29 @@ class ScoreboardConfig:
             self.overs_roi_y = self.DEFAULTS['overs']['y']
             self.overs_roi_width = self.DEFAULTS['overs']['width']
             self.overs_roi_height = self.DEFAULTS['overs']['height']
+            # Batsman name ROI
+            self.batsman_roi_x = self.DEFAULTS['batsman_name']['x']
+            self.batsman_roi_y = self.DEFAULTS['batsman_name']['y']
+            self.batsman_roi_width = self.DEFAULTS['batsman_name']['width']
+            self.batsman_roi_height = self.DEFAULTS['batsman_name']['height']
+            self.start_time = 0.0
 
         logger.info(f"Score ROI: ({self.roi_x}, {self.roi_y}) {self.roi_width}x{self.roi_height}")
         logger.info(f"Overs ROI: ({self.overs_roi_x}, {self.overs_roi_y}) {self.overs_roi_width}x{self.overs_roi_height}")
+        logger.info(f"Batsman ROI: ({self.batsman_roi_x}, {self.batsman_roi_y}) {self.batsman_roi_width}x{self.batsman_roi_height}")
 
-    def save(self, config_file: str):
+    def save(self, config_file: str, suggested_start_time: int = None):
         """Persist configuration to JSON file."""
         config = {
             'roi_x': self.roi_x, 'roi_y': self.roi_y,
             'roi_width': self.roi_width, 'roi_height': self.roi_height,
             'overs_roi_x': self.overs_roi_x, 'overs_roi_y': self.overs_roi_y,
             'overs_roi_width': self.overs_roi_width, 'overs_roi_height': self.overs_roi_height,
+            'batsman_roi_x': self.batsman_roi_x, 'batsman_roi_y': self.batsman_roi_y,
+            'batsman_roi_width': self.batsman_roi_width, 'batsman_roi_height': self.batsman_roi_height,
         }
+        if suggested_start_time is not None:
+            config['suggested_start_time'] = suggested_start_time
         with open(config_file, 'w') as f:
             json.dump(config, f, indent=2)
         logger.info(f"Config saved to {config_file}")
@@ -96,6 +118,23 @@ class ScoreState:
         if other is None:
             return False
         return self.runs == other.runs and self.wickets == other.wickets
+
+
+class BatsmanState:
+    """Tracks individual batsman state (name, runs, balls)."""
+    
+    def __init__(self, name: str, runs: int, balls: int):
+        self.name = name
+        self.runs = runs
+        self.balls = balls
+    
+    def __repr__(self) -> str:
+        return f"{self.name}: {self.runs}({self.balls})"
+    
+    def __eq__(self, other) -> bool:
+        if other is None or not isinstance(other, BatsmanState):
+            return False
+        return self.name == other.name and self.runs == other.runs and self.balls == other.balls
 
     def __hash__(self) -> int:
         return hash((self.runs, self.wickets))
@@ -118,6 +157,172 @@ def clean_ocr_text(text: str) -> str:
     for old, new in OCR_CORRECTIONS.items():
         text = text.replace(old, new)
     return text
+
+
+def parse_batsmen_details(text: str) -> Tuple[Optional[BatsmanState], Optional[BatsmanState]]:
+    """
+    Parse the two-batsman strip from OCR text.
+    
+    Format: "TARLING 3 10 HAMD WAHEED 10 19"
+    - TARLING: 3 runs, 10 balls
+    - HAMD WAHEED: 10 runs, 19 balls
+    
+    Also handles variations with triangle markers or spacing issues.
+    
+    Args:
+        text: Raw OCR text from batsman ROI
+    
+    Returns:
+        Tuple of (Batsman1, Batsman2) or (None, None) if parsing fails
+    """
+    if not text:
+        return None, None
+    
+    # Clean OCR errors
+    text = clean_ocr_text(text.upper())
+    
+    # Remove leading triangle/digit markers (6, 9, ▶, etc.)
+    text = re.sub(r'^[▶►▷▸>•·●649]\s+', '', text)
+    
+    # Pattern: [NAME] [RUNS] [BALLS] [NAME] [RUNS] [BALLS]
+    # Allows multi-word names (e.g., "HAMD WAHEED")
+    # Pattern matches: 2+ uppercase letters, followed by 1-3 digit numbers
+    pattern = re.compile(
+        r'([A-Z][A-Z\s]{2,?}?)\s+(\d{1,3})\s+(\d{1,3})\s+'  # Batsman 1
+        r'([A-Z][A-Z\s]{2,?}?)\s+(\d{1,3})\s+(\d{1,3})'     # Batsman 2
+    )
+    
+    match = pattern.search(text)
+    if match:
+        # Extract and clean names (remove extra whitespace)
+        name1 = ' '.join(match.group(1).strip().split())
+        runs1 = int(match.group(2))
+        balls1 = int(match.group(3))
+        
+        name2 = ' '.join(match.group(4).strip().split())
+        runs2 = int(match.group(5))
+        balls2 = int(match.group(6))
+        
+        # Sanity check: runs and balls should be reasonable
+        if runs1 <= 300 and balls1 <= 200 and runs2 <= 300 and balls2 <= 200:
+            b1 = BatsmanState(name1, runs1, balls1)
+            b2 = BatsmanState(name2, runs2, balls2)
+            logger.debug(f"   📊 Parsed batsmen: {b1} | {b2}")
+            return b1, b2
+    
+    logger.debug(f"   ⚠️  Could not parse batsmen from: '{text}'")
+    return None, None
+
+
+
+# Common player name OCR corrections
+PLAYER_NAME_CORRECTIONS = {
+    '0': 'O', 'o': 'O',  # Reverse of score corrections
+    '1': 'I', 'l': 'I', '|': 'I',
+    '5': 'S',
+    '6': 'G',
+    '8': 'B',
+}
+
+# Regex patterns for striker extraction
+# Triangle markers: ▶, ►, ▷, >, or OCR misreads (6, 9, 4)
+TRIANGLE_PATTERN = re.compile(
+    r'(?:[▶►▷▸>]|^[649]\s)'  # Triangle or leading digit (OCR misread)
+    r'\s*'                    # Optional whitespace
+    r'([A-Z][A-Z]+)'          # Capture: Name (2+ uppercase letters)
+    r'(?:\s+\d+)?'            # Optional: runs
+    r'(?:\s*\(\d+\)|\s+\d+)?', # Optional: (balls) or balls
+    re.IGNORECASE
+)
+
+# Alternative pattern: "NAME runs(balls)" or "NAME runs balls"
+NAME_STATS_PATTERN = re.compile(
+    r'\b([A-Z][A-Z]{2,})\s+'   # Name: 3+ letters
+    r'\d+\s*'                  # Runs
+    r'(?:\(\d+\)|\d+)',        # (balls) or balls
+    re.IGNORECASE
+)
+
+
+def clean_player_name(text: str) -> str:
+    """
+    Extract striker name from OCR text using regex anchoring on triangle marker.
+    
+    Handles multiple formats:
+    - "▶ KOHLI 12(8) | ROHIT 5(2)" → "KOHLI"
+    - "6 THURSTANCE 11 13 IBRAHIM 14 22" → "THURSTANCE" 
+    - "Total 45/2 | ▶ KOHLI 12(8) | ROHIT 5(2)" → "KOHLI"
+    
+    Strategy:
+    1. Regex search for triangle marker (▶, >, or misread 6/9) + NAME
+    2. Fallback: First NAME followed by numbers (runs/balls pattern)
+    3. Last resort: First alphabetic word with 3+ characters
+    
+    Args:
+        text: Raw OCR text from batsman name region
+    
+    Returns:
+        Cleaned player name (e.g., 'KOHLI', 'THURSTANCE')
+    """
+    if not text:
+        logger.debug(f"Raw Name OCR: '' -> Parsed: 'Unknown'")
+        return 'Unknown'
+    
+    original_text = text
+    text_upper = text.upper()
+    
+    # === Strategy 1: Triangle Anchor Pattern ===
+    # Look for triangle (▶, >, ►) or OCR misread (6, 9, 4) followed by name
+    triangle_match = TRIANGLE_PATTERN.search(text_upper)
+    if triangle_match:
+        name = triangle_match.group(1)
+        # Apply letter corrections
+        for old, new in PLAYER_NAME_CORRECTIONS.items():
+            name = name.replace(old, new)
+        if len(name) >= 3:
+            logger.debug(f"Raw Name OCR: '{original_text}' -> Parsed: '{name}' (triangle anchor)")
+            return name
+    
+    # === Strategy 2: Leading digit + First Name ===
+    # Format: "6 THURSTANCE 11 13 IBRAHIM 14 22"
+    tokens = text_upper.split()
+    if len(tokens) >= 2:
+        start_idx = 0
+        # Skip leading single digit (triangle misread)
+        if tokens[0].isdigit() and len(tokens[0]) == 1:
+            start_idx = 1
+        
+        # First valid name token after potential triangle
+        for token in tokens[start_idx:]:
+            cleaned = re.sub(r'[^A-Z]', '', token)
+            if len(cleaned) >= 3 and cleaned.isalpha():
+                for old, new in PLAYER_NAME_CORRECTIONS.items():
+                    cleaned = cleaned.replace(old, new)
+                logger.debug(f"Raw Name OCR: '{original_text}' -> Parsed: '{cleaned}' (first-name)")
+                return cleaned
+    
+    # === Strategy 3: Name + Stats Pattern ===
+    # Look for "NAME runs(balls)" or "NAME runs balls"
+    stats_match = NAME_STATS_PATTERN.search(text_upper)
+    if stats_match:
+        name = stats_match.group(1)
+        for old, new in PLAYER_NAME_CORRECTIONS.items():
+            name = name.replace(old, new)
+        if len(name) >= 3:
+            logger.debug(f"Raw Name OCR: '{original_text}' -> Parsed: '{name}' (stats pattern)")
+            return name
+    
+    # === Strategy 4: Fallback - longest alphabetic word ===
+    words = re.findall(r'[A-Z]{3,}', text_upper)
+    if words:
+        name = max(words, key=len)
+        for old, new in PLAYER_NAME_CORRECTIONS.items():
+            name = name.replace(old, new)
+        logger.debug(f"Raw Name OCR: '{original_text}' -> Parsed: '{name}' (fallback)")
+        return name
+    
+    logger.debug(f"Raw Name OCR: '{original_text}' -> Parsed: 'Unknown' (no match)")
+    return 'Unknown'
 
 
 def parse_overs(text: str) -> Optional[Tuple[int, int]]:
@@ -198,7 +403,8 @@ class OCRScoreReader:
     """Reads cricket scores from video frames using EasyOCR."""
 
     UPSCALE = 3
-    OCR_ALLOWLIST = '0123456789/.' 
+    OCR_ALLOWLIST = '0123456789/.'
+    
     def __init__(self, config: ScoreboardConfig, use_gpu: bool = False):
         self.config = config
         self.reader = easyocr.Reader(['en'], gpu=use_gpu)
@@ -239,12 +445,125 @@ class OCRScoreReader:
     def extract_score_roi(self, frame, debug_path: Optional[str] = None) -> Optional[any]:
         """Extract score region."""
         path = f"{debug_path}_score" if debug_path else None
-        return self._extract_region(frame, self.config.roi_x, self.config.roi_y, self.config.roi_width, self.config.roi_height, path)
+        return self._extract_region(
+            frame, 
+            self.config.roi_x, self.config.roi_y, 
+            self.config.roi_width, self.config.roi_height, 
+            path
+        )
 
     def extract_overs_roi(self, frame, debug_path: Optional[str] = None) -> Optional[any]:
         """Extract overs region."""
         path = f"{debug_path}_overs" if debug_path else None
-        return self._extract_region(frame, self.config.overs_roi_x, self.config.overs_roi_y, self.config.overs_roi_width, self.config.overs_roi_height, path)
+        return self._extract_region(
+            frame,
+            self.config.overs_roi_x, self.config.overs_roi_y,
+            self.config.overs_roi_width, self.config.overs_roi_height,
+            path
+        )
+
+    def extract_batsman_name_roi(self, frame, debug_path: Optional[str] = None) -> Optional[any]:
+        """
+        Extract batsman name region WITHOUT heavy preprocessing.
+        
+        Unlike score ROI, we don't apply binary thresholding because
+        player names need to preserve letter shapes (especially for
+        distinguishing O from 0, I from 1, etc.)
+        """
+        # Skip if ROI not configured (x=0, y=0 means unconfigured)
+        if self.config.batsman_roi_x == 0 and self.config.batsman_roi_y == 0:
+            return None
+        
+        try:
+            height, width = frame.shape[:2]
+            
+            x = self.config.batsman_roi_x
+            y = self.config.batsman_roi_y
+            w = self.config.batsman_roi_width
+            h = self.config.batsman_roi_height
+            
+            # Clamp to frame bounds
+            x = max(0, min(x, width - w))
+            y = max(0, min(y, height - h))
+            
+            # Extract raw ROI - keep original colors for best OCR on broadcast text
+            roi = frame[y:y+h, x:x+w].copy()
+            
+            # Upscale for better OCR accuracy
+            roi = cv2.resize(roi, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+            
+            if debug_path:
+                cv2.imwrite(f"{debug_path}_batsman.jpg", roi)
+            
+            return roi
+            
+        except Exception as e:
+            logger.debug(f"Batsman ROI extraction error: {e}")
+            return None
+
+    def read_batsman_name(self, frame, timestamp: float = 0.0, debug_dir: str = None) -> str:
+        """
+        Read batsman name from frame using the configured ROI.
+        
+        Args:
+            frame: Video frame (BGR numpy array)
+            timestamp: Frame timestamp for debug logging
+            debug_dir: Optional directory to save failed ROI images for inspection
+        
+        Returns:
+            Cleaned player name or 'Unknown' if extraction fails
+        """
+        roi = self.extract_batsman_name_roi(frame)
+        if roi is None:
+            return 'Unknown'
+        
+        try:
+            # Try multiple OCR strategies for better accuracy
+            
+            # Strategy 1: Paragraph mode (default, best for multi-word names)
+            results = self.reader.readtext(roi, detail=1, paragraph=True)
+            if results and len(results) > 0:
+                raw_text = ' '.join([r[1] for r in results if len(r) > 1])
+                if raw_text.strip():
+                    confidence = max([r[2] for r in results if len(r) > 2], default=0.0)
+                    cleaned_name = clean_player_name(raw_text)
+                    
+                    # Always log name OCR attempts (INFO level for visibility)
+                    logger.info(f"   📝 Name OCR: '{raw_text}' (conf={confidence:.2f}) → '{cleaned_name}'")
+                    
+                    # If we got a valid name, return it
+                    if cleaned_name != 'Unknown':
+                        return cleaned_name
+            
+            # Strategy 2: Word-by-word mode (fallback for low confidence)
+            results = self.reader.readtext(roi, detail=1, paragraph=False)
+            if results and len(results) > 0:
+                raw_text = ' '.join([r[1] for r in results if len(r) > 1])
+                if raw_text.strip():
+                    cleaned_name = clean_player_name(raw_text)
+                    
+                    logger.info(f"   📝 Name OCR (fallback): '{raw_text}' → '{cleaned_name}'")
+                    
+                    if cleaned_name != 'Unknown':
+                        return cleaned_name
+            
+            # OCR failed - save debug image if requested, but use DEBUG level to avoid spam
+            # (Scoreboard State Manager in IntegratedDetector handles warning-level logging)
+            if debug_dir:
+                from pathlib import Path
+                debug_path = Path(debug_dir) / f"ocr_failed_{timestamp:.1f}s.jpg"
+                Path(debug_dir).mkdir(parents=True, exist_ok=True)
+                cv2.imwrite(str(debug_path), roi)
+                logger.debug(f"⚠️  Could not extract player name at {timestamp:.1f}s (no text detected)")
+                logger.debug(f"   💾 Saved ROI for inspection: {debug_path}")
+            else:
+                logger.debug(f"⚠️  Could not extract player name at {timestamp:.1f}s (no text detected)")
+            
+            return 'Unknown'
+            
+        except Exception as e:
+            logger.warning(f"⚠️  Batsman name OCR error at {timestamp:.1f}s: {e}")
+            return 'Unknown'
 
     def read_score(self, roi_image, min_confidence: float = 0.4, prev_wickets: Optional[int] = None) -> Tuple[Optional[ScoreState], float, str]:
         """
@@ -334,7 +653,9 @@ class EventDetector:
             'timestamp': timestamp,
             'score_before': str(old),
             'score_after': str(new),
-            'description': f'Score: {old} → {new}'
+            'description': f'Score: {old} → {new}',
+            'runs_scored': new.runs - old.runs,
+            'wickets_lost': new.wickets - old.wickets if old.wickets >= 0 and new.wickets >= 0 else 0,
         }
 
     def _detect_wicket(self, old: ScoreState, new: ScoreState, timestamp: float) -> Optional[Dict]:
@@ -479,6 +800,244 @@ class EventDetector:
 
 
 # VIDEO PROCESSING
+def auto_calibrate_roi(video_path: str, sample_timestamps: List[float] = None, use_gpu: bool = False) -> Optional[Dict]:
+    """
+    Automatically detect scoreboard ROI by scanning frames for score patterns.
+    
+    Scans multiple frames looking for text patterns like "123/4" (runs/wickets)
+    and returns the bounding box of the detected score region.
+    
+    Args:
+        video_path: Path to video file
+        sample_timestamps: List of timestamps to sample (default: multiple points)
+        use_gpu: Enable GPU for OCR
+    
+    Returns:
+        Dict with detected ROI coordinates or None if detection failed
+        {
+            'score': {'x': int, 'y': int, 'width': int, 'height': int},
+            'overs': {'x': int, 'y': int, 'width': int, 'height': int},
+            'batsman_name': {'x': int, 'y': int, 'width': int, 'height': int},
+            'confidence': float
+        }
+    """
+    logger.info("=" * 60)
+    logger.info("🔍 AUTO-CALIBRATION MODE")
+    logger.info("=" * 60)
+    logger.info("Scanning video for scoreboard location...")
+    
+    video = cv2.VideoCapture(video_path)
+    if not video.isOpened():
+        raise ValueError(f"Cannot open video: {video_path}")
+    
+    fps = video.get(cv2.CAP_PROP_FPS)
+    total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = total_frames / fps
+    
+    # Default sample points: 10%, 20%, 30%, 40%, 50% of video
+    if sample_timestamps is None:
+        sample_timestamps = [duration * p for p in [0.1, 0.2, 0.3, 0.4, 0.5]]
+    
+    logger.info(f"Video: {Path(video_path).name} ({duration/3600:.1f}h)")
+    logger.info(f"Sampling {len(sample_timestamps)} frames...")
+    
+    # Initialize OCR reader
+    reader = easyocr.Reader(['en'], gpu=use_gpu)
+    
+    # Score pattern: digits followed by / followed by 1-2 digits (e.g., "145/3", "23/0")
+    score_pattern = re.compile(r'^\d{1,3}[/\\|]\d{1,2}$')
+    # Overs pattern: digit.digit (e.g., "14.2", "8.5")
+    overs_pattern = re.compile(r'^\d{1,2}\.\d$')
+    
+    score_detections = []
+    overs_detections = []
+    name_detections = []
+    
+    for ts in sample_timestamps:
+        frame_idx = min(int(ts * fps), total_frames - 1)
+        video.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ret, frame = video.read()
+        
+        if not ret:
+            continue
+        
+        logger.info(f"   Scanning frame at {ts:.0f}s...")
+        
+        # Run OCR on entire frame (or bottom half where scoreboards usually are)
+        height, width = frame.shape[:2]
+        # Focus on bottom 40% of frame (scoreboards are usually there)
+        search_region = frame[int(height * 0.5):, :]
+        y_offset = int(height * 0.5)
+        
+        try:
+            results = reader.readtext(search_region, detail=1)
+        except Exception as e:
+            logger.warning(f"   OCR error: {e}")
+            continue
+        
+        for detection in results:
+            bbox, text, confidence = detection
+            if confidence < 0.5:
+                continue
+            
+            # Clean text for pattern matching
+            clean_text = text.strip().replace(' ', '')
+            
+            # Calculate bounding box (adjust for y_offset)
+            x_coords = [p[0] for p in bbox]
+            y_coords = [p[1] for p in bbox]
+            x1, x2 = int(min(x_coords)), int(max(x_coords))
+            y1, y2 = int(min(y_coords)) + y_offset, int(max(y_coords)) + y_offset
+            
+            # Check for score pattern
+            if score_pattern.match(clean_text):
+                logger.info(f"   ✅ Found score: '{text}' at ({x1}, {y1}) conf={confidence:.2f}")
+                score_detections.append({
+                    'x': x1, 'y': y1, 'width': x2 - x1, 'height': y2 - y1,
+                    'confidence': confidence, 'text': text, 'timestamp': ts
+                })
+            
+            # Check for overs pattern
+            elif overs_pattern.match(clean_text):
+                logger.info(f"   ✅ Found overs: '{text}' at ({x1}, {y1}) conf={confidence:.2f}")
+                overs_detections.append({
+                    'x': x1, 'y': y1, 'width': x2 - x1, 'height': y2 - y1,
+                    'confidence': confidence, 'text': text
+                })
+            
+            # Check for player names (mostly letters, 3+ chars)
+            # More lenient: allow some OCR errors (digits that look like letters)
+            text_upper = clean_text.upper()
+            # Count letters vs total length
+            letter_count = sum(1 for c in text_upper if c.isalpha())
+            if (len(text_upper) >= 3 and 
+                letter_count >= len(text_upper) * 0.7 and  # At least 70% letters
+                not score_pattern.match(clean_text) and  # Not a score
+                not overs_pattern.match(clean_text)):  # Not overs
+                logger.info(f"   🏏 Found potential name: '{text}' at ({x1}, {y1})")
+                name_detections.append({
+                    'x': x1, 'y': y1, 'width': x2 - x1, 'height': y2 - y1,
+                    'confidence': confidence, 'text': text
+                })
+    
+    video.release()
+    
+    if not score_detections:
+        logger.warning("❌ Could not detect score region automatically")
+        logger.warning("   Try running with --visualize to manually check frame layout")
+        return None
+    
+    # Find the most common/reliable score location (cluster detections)
+    # Use the detection with highest confidence as primary
+    best_score = max(score_detections, key=lambda d: d['confidence'])
+    
+    # Find earliest timestamp where score was detected (for suggested start time)
+    earliest_score_ts = min(d.get('timestamp', 0) for d in score_detections if d.get('timestamp'))
+    
+    # Add minimal padding around detected region
+    padding = 8
+    score_roi = {
+        'x': max(0, best_score['x'] - padding),
+        'y': max(0, best_score['y'] - padding),
+        'width': best_score['width'] + padding * 2,
+        'height': best_score['height'] + padding * 2
+    }
+    
+    # Find overs near the score (usually below or beside)
+    overs_roi = None
+    if overs_detections:
+        # Find overs closest to score
+        score_center_y = best_score['y'] + best_score['height'] // 2
+        closest_overs = min(overs_detections, 
+                          key=lambda d: abs(d['y'] - score_center_y))
+        overs_roi = {
+            'x': max(0, closest_overs['x'] - padding),
+            'y': max(0, closest_overs['y'] - padding),
+            'width': closest_overs['width'] + padding * 2,
+            'height': closest_overs['height'] + padding * 2
+        }
+    else:
+        # Estimate overs position (usually below score)
+        overs_roi = {
+            'x': score_roi['x'],
+            'y': score_roi['y'] + score_roi['height'] + 5,
+            'width': score_roi['width'],
+            'height': 35
+        }
+    
+    # Find batsman name region (on same row as score)
+    batsman_roi = None
+    if name_detections:
+        # Find names very close to score's Y level (within 20 pixels)
+        score_y = best_score['y']
+        score_x = best_score['x']
+        
+        # Filter for names on same row as score (strict Y tolerance)
+        same_row_names = [d for d in name_detections 
+                         if abs(d['y'] - score_y) < 20]  # Tight tolerance
+        
+        # If no names on same row, try wider search
+        if not same_row_names:
+            same_row_names = [d for d in name_detections 
+                             if abs(d['y'] - score_y) < 50]
+        
+        if same_row_names:
+            # Prefer names to the right of score
+            right_names = [d for d in same_row_names if d['x'] > score_x]
+            
+            if right_names:
+                # Take first name to the right (closest)
+                closest_name = min(right_names, key=lambda d: d['x'])
+            else:
+                # If nothing on right, take any nearby name
+                closest_name = same_row_names[0]
+            
+            logger.info(f"   📍 Found batsman name area: '{closest_name['text']}' at ({closest_name['x']}, {closest_name['y']})")
+            batsman_roi = {
+                'x': closest_name['x'] - padding,
+                'y': closest_name['y'] - padding,
+                'width': 300,  # Generous width for full name
+                'height': closest_name['height'] + padding * 2
+            }
+    
+    # If no name found, estimate position (right of score, same Y)
+    if batsman_roi is None:
+        logger.info("   ⚠️  No batsman names detected - using estimated position")
+        batsman_roi = {
+            'x': score_roi['x'] + score_roi['width'] + 20,
+            'y': score_roi['y'],  # Same Y as score
+            'width': 400,
+            'height': score_roi['height']
+        }
+    
+    # Calculate suggested start time from earliest score detection
+    suggested_start = None
+    timestamps_with_scores = [d.get('timestamp', 0) for d in score_detections if d.get('timestamp')]
+    if timestamps_with_scores:
+        earliest_ts = min(timestamps_with_scores)
+        # Start 60 seconds before the earliest detection to be safe
+        suggested_start = max(0, int(earliest_ts) - 60)
+    
+    result = {
+        'score': score_roi,
+        'overs': overs_roi,
+        'batsman_name': batsman_roi,
+        'confidence': best_score['confidence'],
+        'suggested_start_time': suggested_start
+    }
+    
+    logger.info("-" * 60)
+    logger.info("✅ AUTO-CALIBRATION COMPLETE")
+    logger.info(f"   Score ROI: ({score_roi['x']}, {score_roi['y']}) {score_roi['width']}x{score_roi['height']}")
+    logger.info(f"   Overs ROI: ({overs_roi['x']}, {overs_roi['y']}) {overs_roi['width']}x{overs_roi['height']}")
+    logger.info(f"   Batsman ROI: ({batsman_roi['x']}, {batsman_roi['y']}) {batsman_roi['width']}x{batsman_roi['height']}")
+    logger.info(f"   Detection confidence: {best_score['confidence']:.2f}")
+    if suggested_start is not None:
+        logger.info(f"   ⏱️  Suggested --start-time: {suggested_start}s (match content detected at {earliest_ts:.0f}s)")
+    
+    return result
+
+
 def visualize_roi(video_path: str, config: ScoreboardConfig, timestamp: float = 0.0) -> str:
     """Draw ROI boxes on a single frame for calibration verification."""
     logger.info("=" * 60)
@@ -505,26 +1064,53 @@ def visualize_roi(video_path: str, config: ScoreboardConfig, timestamp: float = 
 
     height, width = frame.shape[:2]
     logger.info(f"Frame dimensions: {width}x{height}")
-    logger.info(f"Score ROI: ({config.roi_x}, {config.roi_y}) to ({config.roi_x + config.roi_width}, {config.roi_y + config.roi_height})")
-    logger.info(f"Overs ROI: ({config.overs_roi_x}, {config.overs_roi_y}) to ({config.overs_roi_x + config.overs_roi_width}, {config.overs_roi_y + config.overs_roi_height})")
+    
+    # Use ROI coordinates directly (no scaling)
+    score_x = config.roi_x
+    score_y = config.roi_y
+    score_w = config.roi_width
+    score_h = config.roi_height
+    
+    overs_x = config.overs_roi_x
+    overs_y = config.overs_roi_y
+    overs_w = config.overs_roi_width
+    overs_h = config.overs_roi_height
+    
+    batsman_x = config.batsman_roi_x
+    batsman_y = config.batsman_roi_y
+    batsman_w = config.batsman_roi_width
+    batsman_h = config.batsman_roi_height
+    
+    logger.info(f"Score ROI: ({score_x}, {score_y}) to ({score_x + score_w}, {score_y + score_h})")
+    logger.info(f"Overs ROI: ({overs_x}, {overs_y}) to ({overs_x + overs_w}, {overs_y + overs_h})")
 
     # Validate ROI bounds
-    if config.roi_y + config.roi_height > height or config.roi_x + config.roi_width > width:
+    if score_y + score_h > height or score_x + score_w > width:
         logger.warning(f"⚠️  Score ROI partially outside frame bounds! Frame: {width}x{height}")
-    if config.overs_roi_y + config.overs_roi_height > height or config.overs_roi_x + config.overs_roi_width > width:
+    if overs_y + overs_h > height or overs_x + overs_w > width:
         logger.warning(f"⚠️  Overs ROI partially outside frame bounds! Frame: {width}x{height}")
 
     # Draw Score ROI (green)
-    pt1_score = (config.roi_x, config.roi_y)
-    pt2_score = (config.roi_x + config.roi_width, config.roi_y + config.roi_height)
+    pt1_score = (score_x, score_y)
+    pt2_score = (score_x + score_w, score_y + score_h)
     cv2.rectangle(frame, pt1_score, pt2_score, (0, 255, 0), 3)
-    cv2.putText(frame, "SCORE", (config.roi_x, max(10, config.roi_y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    cv2.putText(frame, "SCORE", (score_x, max(10, score_y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
     # Draw Overs ROI (blue)
-    pt1_overs = (config.overs_roi_x, config.overs_roi_y)
-    pt2_overs = (config.overs_roi_x + config.overs_roi_width, config.overs_roi_y + config.overs_roi_height)
+    pt1_overs = (overs_x, overs_y)
+    pt2_overs = (overs_x + overs_w, overs_y + overs_h)
     cv2.rectangle(frame, pt1_overs, pt2_overs, (255, 0, 0), 3)
-    cv2.putText(frame, "OVERS", (config.overs_roi_x, max(10, config.overs_roi_y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+    cv2.putText(frame, "OVERS", (overs_x, max(10, overs_y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+    # Draw Batsman Name ROI (yellow) - only if configured (non-zero coordinates)
+    if config.batsman_roi_x > 0 or config.batsman_roi_y > 0:
+        pt1_batsman = (batsman_x, batsman_y)
+        pt2_batsman = (batsman_x + batsman_w, batsman_y + batsman_h)
+        cv2.rectangle(frame, pt1_batsman, pt2_batsman, (0, 255, 255), 3)
+        cv2.putText(frame, "BATSMAN", (batsman_x, max(10, batsman_y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        logger.info(f"Batsman ROI: ({batsman_x}, {batsman_y}) to ({batsman_x + batsman_w}, {batsman_y + batsman_h})")
+    else:
+        logger.warning("⚠️  Batsman Name ROI not configured (x=0, y=0). Set --batsman-roi-x/y to enable player attribution.")
 
     # Draw frame dimensions text at bottom
     cv2.putText(frame, f"Frame: {width}x{height}", (10, height - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
@@ -532,8 +1118,10 @@ def visualize_roi(video_path: str, config: ScoreboardConfig, timestamp: float = 
     output_path = "roi_check.jpg"
     cv2.imwrite(output_path, frame)
     logger.info(f"✅ Saved: {output_path}")
-    logger.info(f"   Green box (SCORE): ({config.roi_x}, {config.roi_y}) {config.roi_width}x{config.roi_height}")
-    logger.info(f"   Blue box (OVERS):  ({config.overs_roi_x}, {config.overs_roi_y}) {config.overs_roi_width}x{config.overs_roi_height}")
+    logger.info(f"   Green box (SCORE): ({score_x}, {score_y}) {score_w}x{score_h}")
+    logger.info(f"   Blue box (OVERS):  ({overs_x}, {overs_y}) {overs_w}x{overs_h}")
+    if config.batsman_roi_x > 0 or config.batsman_roi_y > 0:
+        logger.info(f"   Yellow box (BATSMAN): ({batsman_x}, {batsman_y}) {batsman_w}x{batsman_h}")
     return output_path
 
 
@@ -576,6 +1164,13 @@ def process_video(video_path: str, config: ScoreboardConfig, sample_interval: fl
     stats = {'success': 0, 'fail': 0, 'low_conf': 0}
     last_valid_score = None
     candidate_score, candidate_count = None, 0
+    
+    # === DELTA-BASED PLAYER TRACKING ===
+    # Track previous batsmen state to detect whose score increased
+    prev_batsmen: Optional[Tuple[BatsmanState, BatsmanState]] = (None, None)
+    current_batsmen: Optional[Tuple[BatsmanState, BatsmanState]] = (None, None)
+    batsman_read_counter = 0
+    batsman_read_interval = 2  # Read batsmen details every 2 successful score reads
 
     try:
         while True:
@@ -609,6 +1204,29 @@ def process_video(video_path: str, config: ScoreboardConfig, sample_interval: fl
                 if score:
                     stats['success'] += 1
                     last_valid_score = score
+                    
+                    # === READ BATSMEN DETAILS (Delta-based tracking) ===
+                    # Read batsmen details periodically when scoreboard is visible
+                    batsman_read_counter += 1
+                    if batsman_read_counter >= batsman_read_interval:
+                        batsman_read_counter = 0
+                        
+                        # Read batsmen ROI
+                        batsman_roi = reader.extract_batsman_name_roi(frame)
+                        if batsman_roi is not None:
+                            try:
+                                # Get full text from ROI (paragraph mode for complete string)
+                                results = reader.reader.readtext(batsman_roi, detail=0, paragraph=True)
+                                if results:
+                                    raw_text = ' '.join(results)
+                                    # Parse both batsmen with scores
+                                    prev_batsmen = current_batsmen  # Save previous state
+                                    current_batsmen = parse_batsmen_details(raw_text)
+                                    
+                                    if current_batsmen[0]:
+                                        logger.debug(f"   📊 Batsmen: {current_batsmen[0]} | {current_batsmen[1]}")
+                            except Exception as e:
+                                logger.debug(f"   ⚠️  Error reading batsmen details: {e}")
                 else:
                     stats['fail'] += 1
                     score = last_valid_score
@@ -622,6 +1240,46 @@ def process_video(video_path: str, config: ScoreboardConfig, sample_interval: fl
                         if candidate_count >= 2:
                             event = detector.detect(score, timestamp, overs)
                             if event:
+                                # === DELTA-BASED PLAYER ATTRIBUTION ===
+                                detected_player = 'Unknown'
+                                
+                                # Check if we have both current and previous batsmen states
+                                if (current_batsmen[0] is not None and 
+                                    prev_batsmen[0] is not None and 
+                                    current_batsmen[0] != prev_batsmen[0]):
+                                    
+                                    b1_new, b2_new = current_batsmen
+                                    b1_old, b2_old = prev_batsmen
+                                    
+                                    # Calculate score differences
+                                    diff1 = b1_new.runs - b1_old.runs
+                                    diff2 = b2_new.runs - b2_old.runs
+                                    
+                                    runs_scored = event.get('runs_scored', 0)
+                                    
+                                    # Attribute to the batsman whose score increased
+                                    # Allow small OCR tolerance (±1)
+                                    if diff1 >= runs_scored - 1 and diff1 > 0:
+                                        detected_player = b1_new.name
+                                        logger.info(f"   🕵️  Delta Logic: {b1_new.name} scored +{diff1} runs ({b1_old.runs} → {b1_new.runs})")
+                                    elif diff2 >= runs_scored - 1 and diff2 > 0:
+                                        detected_player = b2_new.name
+                                        logger.info(f"   🕵️  Delta Logic: {b2_new.name} scored +{diff2} runs ({b2_old.runs} → {b2_new.runs})")
+                                    else:
+                                        logger.warning(f"   ⚠️  No clear scorer: {b1_old.name} +{diff1}, {b2_old.name} +{diff2}")
+                                
+                                # Fallback: if delta logic failed, try current batsman name
+                                if detected_player == 'Unknown' and current_batsmen[0]:
+                                    # Use first batsman as fallback (usually the striker)
+                                    detected_player = current_batsmen[0].name
+                                    logger.info(f"   ℹ️  Fallback: Using {detected_player} (striker position)")
+                                
+                                event['batsman'] = detected_player
+                                if detected_player != 'Unknown':
+                                    logger.info(f"   🏏 {event['type']} by {detected_player}")
+                                else:
+                                    logger.warning(f"   ⚠️  Could not identify batsman for {event['type']}")
+                                
                                 events.append(event)
                     else:
                         candidate_score, candidate_count = score, 1
@@ -657,7 +1315,6 @@ def process_video(video_path: str, config: ScoreboardConfig, sample_interval: fl
 
 
 # OUTPUT GENERATION
-
 # Clip extraction padding (seconds) - captures bowler run-up and crowd reaction
 PADDING_BEFORE: float = 12.0
 PADDING_AFTER: float = 10.0
@@ -802,9 +1459,18 @@ def extract_clips(
         duration = end - start
         event_count = len(clip_range['events'])
         
-        # Generate descriptive filename
+        # Generate descriptive filename with player name attribution
         event_types = '_'.join(sorted(set(e['type'] for e in clip_range['events'])))
-        clip_name = f"{video_id}_clip_{i:03d}_{event_types}_{int(start)}-{int(end)}.mp4"
+        
+        # Extract player names from events (prioritize known names over 'Unknown')
+        player_names = [e.get('batsman', 'Unknown') for e in clip_range['events']]
+        known_names = [n for n in player_names if n != 'Unknown']
+        primary_player = known_names[0] if known_names else 'Unknown'
+        
+        # Format: PlayerName_EventType_Timestamp.mp4
+        # Sanitize player name for filesystem (remove any remaining special chars)
+        safe_player = re.sub(r'[^A-Za-z0-9]', '', primary_player)
+        clip_name = f"{safe_player}_{event_types}_{int(start)}s.mp4"
         clip_path = Path(output_dir) / clip_name
         
         cmd = [
@@ -855,19 +1521,135 @@ def create_supercut(clips: List[str], output_path: str) -> Optional[str]:
     return None
 
 
+def extract_player_innings_highlights(
+    video_path: str,
+    events: List[Dict],
+    output_dir: str,
+    before: float = PADDING_BEFORE,
+    after: float = PADDING_AFTER,
+    merge_gap: float = MERGE_GAP_THRESHOLD
+) -> Dict[str, str]:
+    """
+    Generate individual highlight reels for each player (Player_Innings.mp4).
+    
+    Groups events by batsman and creates a separate supercut for each player,
+    enabling player-specific highlight reels like "KOHLI_Innings.mp4".
+    
+    Args:
+        video_path: Path to source video
+        events: List of detected events with 'batsman' and 'timestamp' keys
+        output_dir: Directory for output reels
+        before: Seconds of padding before each event
+        after: Seconds of padding after each event
+        merge_gap: Merge clips if gap between them is <= this value
+    
+    Returns:
+        Dict mapping player name to reel path (e.g., {'KOHLI': 'path/KOHLI_Innings.mp4'})
+    """
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    video_id = Path(video_path).stem
+    
+    # Group events by player
+    player_events: Dict[str, List[Dict]] = {}
+    for event in events:
+        player = event.get('batsman', 'Unknown')
+        if player == 'Unknown':
+            continue
+        if player not in player_events:
+            player_events[player] = []
+        player_events[player].append(event)
+    
+    if not player_events:
+        logger.warning("No player-attributed events to create innings highlights")
+        return {}
+    
+    logger.info(f"\n🏏 Generating innings highlights for {len(player_events)} players:")
+    for player, evts in player_events.items():
+        fours = len([e for e in evts if e['type'] == 'FOUR'])
+        sixes = len([e for e in evts if e['type'] == 'SIX'])
+        logger.info(f"   {player}: {len(evts)} events ({fours} fours, {sixes} sixes)")
+    
+    video_duration = get_video_duration(video_path)
+    player_reels: Dict[str, str] = {}
+    
+    for player, evts in player_events.items():
+        # Calculate clip ranges for this player's events
+        clip_ranges = calculate_clip_ranges(evts, video_duration, before, after, merge_gap)
+        
+        if not clip_ranges:
+            continue
+        
+        # Temporary clips directory for this player
+        temp_dir = Path(output_dir) / f".temp_{player}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        clips = []
+        for i, clip_range in enumerate(clip_ranges, 1):
+            start = clip_range['start']
+            duration = clip_range['end'] - start
+            
+            clip_path = temp_dir / f"clip_{i:03d}.mp4"
+            cmd = [
+                'ffmpeg', '-ss', str(start), '-i', video_path,
+                '-t', str(duration), '-c', 'copy',
+                '-avoid_negative_ts', '1', '-y', str(clip_path)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True)
+            if result.returncode == 0:
+                clips.append(str(clip_path))
+        
+        if not clips:
+            continue
+        
+        # Create player innings supercut
+        safe_name = re.sub(r'[^A-Za-z0-9]', '', player)
+        reel_path = str(Path(output_dir) / f"{video_id}_{safe_name}_Innings.mp4")
+        
+        # Concatenate clips
+        concat_file = temp_dir / "concat.txt"
+        with open(concat_file, 'w') as f:
+            for clip in clips:
+                f.write(f"file '{Path(clip).absolute()}'\n")
+        
+        cmd = ['ffmpeg', '-f', 'concat', '-safe', '0', '-i', str(concat_file),
+               '-c', 'copy', '-y', reel_path]
+        result = subprocess.run(cmd, capture_output=True)
+        
+        # Cleanup temp files
+        for clip in clips:
+            Path(clip).unlink(missing_ok=True)
+        concat_file.unlink(missing_ok=True)
+        temp_dir.rmdir()
+        
+        if result.returncode == 0:
+            size = Path(reel_path).stat().st_size / (1024 * 1024)
+            duration = sum(r['end'] - r['start'] for r in clip_ranges)
+            logger.info(f"   ✅ {safe_name}_Innings.mp4 ({duration:.1f}s, {size:.1f} MB)")
+            player_reels[player] = reel_path
+        else:
+            logger.error(f"   ❌ Failed to create {player} innings highlight")
+    
+    return player_reels
+
+
 def save_events_csv(events: List[Dict], output_path: str):
-    """Save events to CSV file."""
+    """Save events to CSV file with player attribution."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['timestamp', 'type', 'description'])
+        writer.writerow(['timestamp', 'type', 'batsman', 'description'])
         for event in events:
-            writer.writerow([event['timestamp'], event['type'], event['description']])
+            writer.writerow([
+                event['timestamp'],
+                event['type'],
+                event.get('batsman', 'Unknown'),
+                event['description']
+            ])
     logger.info(f"📄 Events saved: {output_path}")
 
 
 # CLI
-
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Cricket Highlight Generator - OCR-based')
@@ -892,18 +1674,33 @@ def parse_args():
     parser.add_argument('--overs-roi-y', type=int)
     parser.add_argument('--overs-roi-width', type=int)
     parser.add_argument('--overs-roi-height', type=int)
+    # Batsman name ROI (for player attribution)
+    parser.add_argument('--batsman-roi-x', type=int, help='X coordinate of batsman name region')
+    parser.add_argument('--batsman-roi-y', type=int, help='Y coordinate of batsman name region')
+    parser.add_argument('--batsman-roi-width', type=int, help='Width of batsman name region')
+    parser.add_argument('--batsman-roi-height', type=int, help='Height of batsman name region')
 
     parser.add_argument('--before', type=float, default=PADDING_BEFORE, help=f'Seconds before event (default: {PADDING_BEFORE})')
     parser.add_argument('--after', type=float, default=PADDING_AFTER, help=f'Seconds after event (default: {PADDING_AFTER})')
     parser.add_argument('--merge-gap', type=float, default=MERGE_GAP_THRESHOLD, help=f'Merge clips if gap <= this (default: {MERGE_GAP_THRESHOLD}s)')
     parser.add_argument('--no-clips', action='store_true', help='Skip clip extraction')
     parser.add_argument('--no-supercut', action='store_true', help='Skip supercut')
+    parser.add_argument('--player-innings', action='store_true', 
+                        help='Generate individual innings highlights for each player (e.g., KOHLI_Innings.mp4)')
+    parser.add_argument('--player-reels-dir', default='storage/player_reels',
+                        help='Output directory for player innings reels')
 
     parser.add_argument('--visualize', action='store_true', help='Visualize ROI and exit')
     parser.add_argument('--timestamp', type=float, default=0.0, help='Timestamp for visualization')
     parser.add_argument('--debug-mode', action='store_true', help='Save debug frames')
     parser.add_argument('--verbose', action='store_true', help='Verbose logging')
     parser.add_argument('--gpu', action='store_true', help='Enable GPU acceleration')
+    
+    # Auto-calibration
+    parser.add_argument('--auto-calibrate', action='store_true', 
+                        help='Automatically detect scoreboard ROI (recommended for new videos)')
+    parser.add_argument('--save-config', type=str, 
+                        help='Save auto-calibrated config to JSON file')
 
     return parser.parse_args()
 
@@ -926,6 +1723,15 @@ def apply_roi_overrides(config: ScoreboardConfig, args):
         config.overs_roi_width = args.overs_roi_width
     if args.overs_roi_height is not None:
         config.overs_roi_height = args.overs_roi_height
+    # Batsman name ROI
+    if args.batsman_roi_x is not None:
+        config.batsman_roi_x = args.batsman_roi_x
+    if args.batsman_roi_y is not None:
+        config.batsman_roi_y = args.batsman_roi_y
+    if args.batsman_roi_width is not None:
+        config.batsman_roi_width = args.batsman_roi_width
+    if args.batsman_roi_height is not None:
+        config.batsman_roi_height = args.batsman_roi_height
 
 
 def main():
@@ -940,6 +1746,49 @@ def main():
     config = ScoreboardConfig(args.config)
     config.use_gpu = args.gpu
     config.start_time = args.start_time
+    
+    # Auto-calibration mode
+    if args.auto_calibrate:
+        calibration = auto_calibrate_roi(args.video_path, use_gpu=args.gpu)
+        
+        if calibration:
+            # Apply calibrated ROI to config
+            config.roi_x = calibration['score']['x']
+            config.roi_y = calibration['score']['y']
+            config.roi_width = calibration['score']['width']
+            config.roi_height = calibration['score']['height']
+            
+            config.overs_roi_x = calibration['overs']['x']
+            config.overs_roi_y = calibration['overs']['y']
+            config.overs_roi_width = calibration['overs']['width']
+            config.overs_roi_height = calibration['overs']['height']
+            
+            config.batsman_roi_x = calibration['batsman_name']['x']
+            config.batsman_roi_y = calibration['batsman_name']['y']
+            config.batsman_roi_width = calibration['batsman_name']['width']
+            config.batsman_roi_height = calibration['batsman_name']['height']
+            
+            # Apply suggested start time if detected
+            suggested_start = calibration.get('suggested_start_time')
+            if suggested_start is not None and args.start_time == 0:
+                config.start_time = suggested_start
+                logger.info(f"📍 Auto-applying start time: {suggested_start}s")
+            
+            # Save config if requested
+            if args.save_config:
+                config.save(args.save_config, suggested_start_time=suggested_start)
+                logger.info(f"📁 Config saved to: {args.save_config}")
+            
+            # Show visualization at suggested start time (not 60s)
+            viz_timestamp = args.timestamp if args.timestamp else (suggested_start if suggested_start else 60.0)
+            logger.info("\n🔍 Generating ROI visualization...")
+            visualize_roi(args.video_path, config, viz_timestamp)
+            logger.info("   Check 'roi_check.jpg' to verify detection accuracy")
+        else:
+            logger.error("Auto-calibration failed. Please use manual ROI settings.")
+            return
+    
+    # Apply manual CLI overrides (these take precedence over auto-calibration)
     apply_roi_overrides(config, args)
 
     if args.visualize:
@@ -983,6 +1832,17 @@ def main():
         supercut_path = Path(args.supercut_dir) / f"{video_id}_highlights.mp4"
         supercut_path.parent.mkdir(parents=True, exist_ok=True)
         create_supercut(clips, str(supercut_path))
+
+    # Generate player-specific innings highlights
+    if args.player_innings:
+        player_reels = extract_player_innings_highlights(
+            args.video_path, events, args.player_reels_dir,
+            before=args.before, after=args.after, merge_gap=args.merge_gap
+        )
+        if player_reels:
+            logger.info(f"\n🏆 Generated {len(player_reels)} player innings reels:")
+            for player, path in player_reels.items():
+                logger.info(f"   {player}: {path}")
 
     logger.info("\n✅ COMPLETE")
 
