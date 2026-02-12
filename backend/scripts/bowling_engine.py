@@ -1,5 +1,23 @@
 import cv2
-import mediapipe as mp
+try:
+    # Try new MediaPipe API (v0.10+)
+    from mediapipe.python.solutions import pose as mp_pose_module
+    from mediapipe.python.solutions import drawing_utils as mp_drawing_module
+    from mediapipe.python.solutions.pose import PoseLandmark
+    from mediapipe.python.solutions.drawing_styles import get_default_pose_landmarks_style
+    POSE_CONNECTIONS = mp_pose_module.POSE_CONNECTIONS
+except ImportError:
+    # Fall back to old API (pre-v0.10)
+    import mediapipe as mp
+    mp_pose_module = mp.solutions.pose
+    mp_drawing_module = mp.solutions.drawing_utils
+    PoseLandmark = mp.solutions.pose.PoseLandmark
+    POSE_CONNECTIONS = mp.solutions.pose.POSE_CONNECTIONS
+    try:
+        from mediapipe.python.solutions.drawing_styles import get_default_pose_landmarks_style
+    except ImportError:
+        get_default_pose_landmarks_style = None
+
 import numpy as np
 import os
 import time
@@ -9,10 +27,6 @@ from dotenv import load_dotenv
 from PIL import Image
 from fpdf import FPDF
 import io
-
-# MediaPipe solutions
-mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
 
 # ==========================================
 # CONFIGURATION & ENVIRONMENT
@@ -150,8 +164,9 @@ class GeminiManager:
 # ==========================================
 class CricketPoseAnalyzer:
     def __init__(self):
-        self.mp_pose = mp_pose
-        self.mp_drawing = mp_drawing
+        self.mp_pose = mp_pose_module
+        self.mp_drawing = mp_drawing_module
+        self.pose_connections = POSE_CONNECTIONS
         
         # Reduced model_complexity from 2 to 1 for better stability
         try:
@@ -219,7 +234,7 @@ class CricketPoseAnalyzer:
                 self.mp_drawing.draw_landmarks(
                     annotated_frame,
                     results.pose_landmarks,
-                    self.mp_pose.POSE_CONNECTIONS,
+                    self.pose_connections,
                     landmark_drawing_spec=self.mp_drawing.DrawingSpec(
                         color=(0, 220, 255), thickness=6, circle_radius=8  # BGR: Yellow
                     ),
