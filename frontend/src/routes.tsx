@@ -19,6 +19,7 @@ import VideoDetailPage from './pages/VideoDetailPage';
 import RequestsPage from './pages/RequestsPage';
 import ProfilePage from './pages/ProfilePage';
 import PlayerPerformance from './pages/PlayerPerformance';
+import BowlingAnalysisPage from './pages/BowlingAnalysisPage';
 
 // ============ Auth Initializer (runs once on module load) ============
 let authInitialized = false;
@@ -141,6 +142,7 @@ export default function AppRouter() {
             <Route path="/settings" element={<ProfilePage />} />
             <Route path="/player" element={<PlayerDashboard />} />
             <Route path="/player/:id" element={<PlayerPerformance />} />
+            <Route path="/player/bowling" element={<BowlingAnalysisPage />} />
           </Route>
         </Route>
         

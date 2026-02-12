@@ -15,6 +15,7 @@ interface NavItem {
 const dashboardItems: Record<string, NavItem[]> = {
   PLAYER: [
     { to: "/player", icon: "fas fa-home", label: "Dashboard" },
+    { to: "/player/bowling", icon: "fas fa-bowling-ball", label: "Bowling" },
     { to: "/library", icon: "fas fa-video", label: "Library" },
     { to: "/requests", icon: "fas fa-comment-dots", label: "Requests" },
     { to: "/settings", icon: "fas fa-cog", label: "Settings" },
