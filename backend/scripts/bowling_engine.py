@@ -53,16 +53,23 @@ if mp_pose_module is None:
         pass
 
 # Final check
+MEDIAPIPE_AVAILABLE = False
 if mp_pose_module is None or mp_drawing_module is None:
-    raise ImportError(
-        "Unable to import MediaPipe. Tried multiple import strategies:\n"
-        "1. mediapipe.solutions.pose (v0.8-0.9)\n"
-        "2. mediapipe.python.solutions (v0.10+)\n"
-        "3. mediapipe base import\n"
-        "Please ensure mediapipe>=0.10.0 is installed correctly."
+    print(
+        "⚠ WARNING: MediaPipe not available. Bowling analysis disabled.\n"
+        "Tried import strategies:\n"
+        "  1. mediapipe.solutions.pose (v0.8-0.9)\n"
+        "  2. mediapipe.python.solutions (v0.10+)\n"
+        "  3. mediapipe base import\n"
+        "Install: pip install mediapipe>=0.10.0"
     )
+    # Set dummy values to allow module import
+    mp_pose_module = None
+    mp_drawing_module = None
+    POSE_CONNECTIONS = None
 else:
     print(f"✓ MediaPipe loaded successfully using: {import_strategy_used}")
+    MEDIAPIPE_AVAILABLE = True
 
 # ==========================================
 # CONFIGURATION & ENVIRONMENT
@@ -198,29 +205,30 @@ class GeminiManager:
 # ==========================================
 # BIOMECHANICAL ANALYSIS ENGINE
 # ==========================================
-class CricketPoseAnalyzer:
-    def __init__(self):
-        self.mp_pose = mp_pose_module
-        self.mp_drawing = mp_drawing_module
-        self.pose_connections = POSE_CONNECTIONS
-        
-        # Reduced model_complexity from 2 to 1 for better stability
-        try:
-            self.pose = self.mp_pose.Pose(
-                static_image_mode=False,
-                model_complexity=1, 
-                enable_segmentation=False,
-                min_detection_confidence=0.7,
-                min_tracking_confidence=0.7
-            )
-        except Exception as e:
-            raise e
+if MEDIAPIPE_AVAILABLE:
+    class CricketPoseAnalyzer:
+        def __init__(self):
+            self.mp_pose = mp_pose_module
+            self.mp_drawing = mp_drawing_module
+            self.pose_connections = POSE_CONNECTIONS
+            
+            # Reduced model_complexity from 2 to 1 for better stability
+            try:
+                self.pose = self.mp_pose.Pose(
+                    static_image_mode=False,
+                    model_complexity=1, 
+                    enable_segmentation=False,
+                    min_detection_confidence=0.7,
+                    min_tracking_confidence=0.7
+                )
+            except Exception as e:
+                raise e
 
-    def calculate_angle(self, a, b, c):
-        a, b, c = np.array(a), np.array(b), np.array(c)
-        radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
-        angle = np.abs(radians*180.0/np.pi)
-        return 360-angle if angle > 180.0 else angle
+        def calculate_angle(self, a, b, c):
+            a, b, c = np.array(a), np.array(b), np.array(c)
+            radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+            angle = np.abs(radians*180.0/np.pi)
+            return 360-angle if angle > 180.0 else angle
 
     def process_video(self, video_path):
         cap = cv2.VideoCapture(video_path)
@@ -303,6 +311,17 @@ class CricketPoseAnalyzer:
             cap.release()
         
         return df, display_df, captured_images, output_path
+else:
+    # MediaPipe not available - define dummy class
+    class CricketPoseAnalyzer:
+        def __init__(self):
+            raise RuntimeError(
+                "CricketPoseAnalyzer requires MediaPipe, which is not available. "
+                "Please install: pip install mediapipe>=0.10.0"
+            )
+        
+        def process_video(self, video_path):
+            raise RuntimeError("MediaPipe not available")
 
 # ==========================================
 # PDF GENERATOR

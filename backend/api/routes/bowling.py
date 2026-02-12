@@ -25,7 +25,12 @@ from schemas.bowling import (
     FeedbackResponse,
 )
 from utils.auth import get_current_user
-from scripts.bowling_engine import CricketPoseAnalyzer, GeminiManager, create_pdf
+from scripts.bowling_engine import (
+    CricketPoseAnalyzer, 
+    GeminiManager, 
+    create_pdf, 
+    MEDIAPIPE_AVAILABLE
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +66,13 @@ async def analyze_bowling(
     Upload a bowling video for biomechanics analysis.
     Persists the result to the database and returns the full analysis.
     """
+    # Check if MediaPipe is available
+    if not MEDIAPIPE_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Bowling analysis feature is currently unavailable. MediaPipe dependency not installed on server."
+        )
+    
     if not file.filename or not file.filename.lower().endswith(('.mp4', '.mov', '.avi')):
         raise HTTPException(status_code=400, detail="Invalid file type. Upload MP4, MOV, or AVI.")
 
