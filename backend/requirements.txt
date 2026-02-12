@@ -42,6 +42,7 @@ torchvision>=0.15.0          # Vision models and transforms
 scipy>=1.11.0                # Audio FFT analysis
 
 # Bowling Analysis
+pandas>=2.0.0                # DataFrame operations for metrics analysis
 google-genai>=0.6.0
 fpdf2>=2.7.0
 Pillow>=10.0.0
