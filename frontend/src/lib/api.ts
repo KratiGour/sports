@@ -26,15 +26,23 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('access_token');
     
-    if (token && config.headers) {
+    // Public routes that don't need authentication
+    const publicRoutes = ['/auth/login', '/auth/register', '/health'];
+    const isPublicRoute = publicRoutes.some(route => config.url?.includes(route));
+    
+    // Only attach token if available AND not a public route
+    if (token && config.headers && !isPublicRoute) {
       config.headers.Authorization = `Bearer ${token}`;
-    } else if (!token) {
+    }
+    
+    // Only warn about missing token for protected routes
+    if (!token && !isPublicRoute) {
       console.warn(`⚠️ [API] No token found for ${config.method?.toUpperCase()} ${config.url}`);
     }
     
     // Log requests in development
     if (import.meta.env.DEV) {
-      console.log(`🚀 [API] ${config.method?.toUpperCase()} ${config.url} ${token ? '(with token)' : '(NO TOKEN)'}`);
+      console.log(`🚀 [API] ${config.method?.toUpperCase()} ${config.url} ${token && !isPublicRoute ? '(with token)' : isPublicRoute ? '(public)' : '(NO TOKEN)'}`);
     }
     
     return config;
