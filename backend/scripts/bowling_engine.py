@@ -25,6 +25,7 @@ try:
     POSE_CONNECTIONS = POSE_CONN_TEMP
     import_strategy_used = "mediapipe.solutions (v0.8-0.9)"
 except (ImportError, AttributeError) as e:
+    print(f"Strategy 1 failed: {e}")
     pass
 
 # Strategy 2: Try mediapipe.python.solutions (v0.10+)
@@ -38,6 +39,7 @@ if mp_pose_module is None:
         POSE_CONNECTIONS = POSE_CONN_TEMP
         import_strategy_used = "mediapipe.python.solutions (v0.10+)"
     except (ImportError, AttributeError) as e:
+        print(f"🚨 Strategy 2 failed: {e}")
         pass
 
 # Strategy 3: Try base mediapipe import with attribute access
@@ -50,6 +52,7 @@ if mp_pose_module is None:
             POSE_CONNECTIONS = mp.solutions.pose.POSE_CONNECTIONS
             import_strategy_used = "mediapipe base import with .solutions"
     except (ImportError, AttributeError) as e:
+        print(f"🚨 Strategy 3 failed: {e}")
         pass
 
 # Final check
