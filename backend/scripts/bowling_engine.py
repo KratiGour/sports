@@ -233,87 +233,87 @@ if MEDIAPIPE_AVAILABLE:
             angle = np.abs(radians*180.0/np.pi)
             return 360-angle if angle > 180.0 else angle
 
-    def process_video(self, video_path):
-        cap = cv2.VideoCapture(video_path)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        
-        metrics = []
-        captured_images = {}
-        
-        # Create output video writer for annotated version
-        output_path = video_path.replace('.mp4', '_annotated.mp4').replace('.mov', '_annotated.mp4').replace('.avi', '_annotated.mp4')
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-        
-        frame_idx = 0
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret: break
+        def process_video(self, video_path):
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = self.pose.process(frame_rgb)
+            metrics = []
+            captured_images = {}
             
-            annotated_frame = frame.copy()  # Keep in BGR for video writer
+            # Create output video writer for annotated version
+            output_path = video_path.replace('.mp4', '_annotated.mp4').replace('.mov', '_annotated.mp4').replace('.avi', '_annotated.mp4')
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
             
-            if results.pose_landmarks:
-                landmarks = results.pose_landmarks.landmark
-                def gp(idx): return [landmarks[idx].x, landmarks[idx].y]
+            frame_idx = 0
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret: break
                 
-                # Calculations
-                r_elbow = self.calculate_angle(gp(11), gp(13), gp(15))
-                l_elbow = self.calculate_angle(gp(12), gp(14), gp(16))
-                r_wrist = gp(15)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = self.pose.process(frame_rgb)
                 
-                frame_data = {
-                    "frame": frame_idx,
-                    "r_elbow_angle": round(r_elbow, 2),
-                    "l_elbow_angle": round(l_elbow, 2),
-                    "r_wrist_y": round(r_wrist[1], 4),
-                    "hip_center_y": round((gp(23)[1] + gp(24)[1]) / 2, 4),
-                    "timestamp": round(frame_idx / fps, 2)
-                }
-                metrics.append(frame_data)
+                annotated_frame = frame.copy()  # Keep in BGR for video writer
                 
-                # Draw pose landmarks on frame (Yellow dots + white lines) - convert to BGR
-                self.mp_drawing.draw_landmarks(
-                    annotated_frame,
-                    results.pose_landmarks,
-                    self.pose_connections,
-                    landmark_drawing_spec=self.mp_drawing.DrawingSpec(
-                        color=(0, 220, 255), thickness=6, circle_radius=8  # BGR: Yellow
-                    ),
-                    connection_drawing_spec=self.mp_drawing.DrawingSpec(
-                        color=(255, 255, 255), thickness=4  # BGR: White
+                if results.pose_landmarks:
+                    landmarks = results.pose_landmarks.landmark
+                    def gp(idx): return [landmarks[idx].x, landmarks[idx].y]
+                    
+                    # Calculations
+                    r_elbow = self.calculate_angle(gp(11), gp(13), gp(15))
+                    l_elbow = self.calculate_angle(gp(12), gp(14), gp(16))
+                    r_wrist = gp(15)
+                    
+                    frame_data = {
+                        "frame": frame_idx,
+                        "r_elbow_angle": round(r_elbow, 2),
+                        "l_elbow_angle": round(l_elbow, 2),
+                        "r_wrist_y": round(r_wrist[1], 4),
+                        "hip_center_y": round((gp(23)[1] + gp(24)[1]) / 2, 4),
+                        "timestamp": round(frame_idx / fps, 2)
+                    }
+                    metrics.append(frame_data)
+                    
+                    # Draw pose landmarks on frame (Yellow dots + white lines) - convert to BGR
+                    self.mp_drawing.draw_landmarks(
+                        annotated_frame,
+                        results.pose_landmarks,
+                        self.pose_connections,
+                        landmark_drawing_spec=self.mp_drawing.DrawingSpec(
+                            color=(0, 220, 255), thickness=6, circle_radius=8  # BGR: Yellow
+                        ),
+                        connection_drawing_spec=self.mp_drawing.DrawingSpec(
+                            color=(255, 255, 255), thickness=4  # BGR: White
+                        )
                     )
-                )
-            
-            # Write annotated frame to output video
-            out.write(annotated_frame)
-            frame_idx += 1
-            
-        cap.release()
-        out.release()
-        
-        df = pd.DataFrame(metrics)
-        display_df = pd.DataFrame()
-        
-        if not df.empty:
-            display_df = df.drop(columns=['frame']).rename(columns=METRIC_LABELS)
-
-            # Capture key frames with pose overlay for thumbnail/preview
-            # Release Point (lowest wrist)
-            release_idx = df['r_wrist_y'].idxmin()
-            cap = cv2.VideoCapture(output_path)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, release_idx)
-            ret, rel_frame = cap.read()
-            if ret:
-                captured_images['Release Point'] = cv2.cvtColor(rel_frame, cv2.COLOR_BGR2RGB)
+                
+                # Write annotated frame to output video
+                out.write(annotated_frame)
+                frame_idx += 1
+                
             cap.release()
-        
-        return df, display_df, captured_images, output_path
+            out.release()
+            
+            df = pd.DataFrame(metrics)
+            display_df = pd.DataFrame()
+            
+            if not df.empty:
+                display_df = df.drop(columns=['frame']).rename(columns=METRIC_LABELS)
+
+                # Capture key frames with pose overlay for thumbnail/preview
+                # Release Point (lowest wrist)
+                release_idx = df['r_wrist_y'].idxmin()
+                cap = cv2.VideoCapture(output_path)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, release_idx)
+                ret, rel_frame = cap.read()
+                if ret:
+                    captured_images['Release Point'] = cv2.cvtColor(rel_frame, cv2.COLOR_BGR2RGB)
+                cap.release()
+            
+            return df, display_df, captured_images, output_path
 else:
     # MediaPipe not available - define dummy class
     class CricketPoseAnalyzer:

@@ -198,8 +198,9 @@ async def analyze_bowling(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Bowling analysis failed")
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        error_msg = f"Analysis failed: {type(e).__name__}: {str(e)}"
+        logger.exception(f"🚨 BOWLING ERROR - {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/history", response_model=BowlingAnalysisListResponse)
