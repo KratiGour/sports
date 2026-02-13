@@ -253,6 +253,12 @@ if MEDIAPIPE_AVAILABLE:
                 ret, frame = cap.read()
                 if not ret: break
                 
+                # Skip every other frame for faster processing (30fps → 15fps analysis)
+                if frame_idx % 2 != 0:
+                    out.write(frame)  # Write original frame without processing
+                    frame_idx += 1
+                    continue
+                
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 results = self.pose.process(frame_rgb)
                 
