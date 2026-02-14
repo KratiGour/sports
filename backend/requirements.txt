@@ -23,8 +23,8 @@ psycopg2-binary>=2.9.9       # PostgreSQL driver
 # Authentication & Security
 email-validator>=2.0.0
 PyJWT>=2.8.0
-passlib[bcrypt]>=1.7.4
-bcrypt==4.2.1
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
 python-jose[cryptography]>=3.3.0
 
 # Video Processing
@@ -34,3 +34,15 @@ opencv-python-headless>=4.8.1  # Video analysis (headless for server - no GUI de
 # Machine Learning & OCR
 numpy>=1.26.2
 easyocr>=1.7.0               # OCR text recognition
+
+# Multi-Modal Detection (Optional - for 99% accuracy mode)
+mediapipe==0.10.11           # Pose estimation (pinned for stability)
+torch>=2.0.0                 # TSM action recognition backbone
+torchvision>=0.15.0          # Vision models and transforms
+scipy>=1.11.0                # Audio FFT analysis
+
+# Bowling Analysis
+pandas>=2.0.0                # DataFrame operations for metrics analysis
+google-genai>=0.6.0
+fpdf2>=2.7.0
+Pillow>=10.0.0

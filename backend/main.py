@@ -24,6 +24,8 @@ STORAGE_DIRS = [
     "storage/raw",
     "storage/trimmed",
     "storage/highlight",
+    "storage/reports",
+    "storage/bowling_videos",
 ]
 for dir_path in STORAGE_DIRS:
     Path(dir_path).mkdir(parents=True, exist_ok=True)
@@ -101,6 +103,8 @@ app.add_middleware(
 app.mount("/static/uploads", StaticFiles(directory="storage/uploads"), name="uploads")
 app.mount("/static/clips", StaticFiles(directory="storage/trimmed"), name="clips")
 app.mount("/static/highlights", StaticFiles(directory="storage/highlight"), name="highlights")
+app.mount("/static/reports", StaticFiles(directory="storage/reports"), name="reports")
+app.mount("/static/bowling_videos", StaticFiles(directory="storage/bowling_videos"), name="bowling_videos")
 
 
 # ============ Health Check Endpoints ============
@@ -137,7 +141,7 @@ def db_health_check():
 
 # ============ Include API Routers ============
 
-from api.routes import auth, videos, jobs, requests
+from api.routes import auth, videos, jobs, requests, bowling, BOWLING_AVAILABLE
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
@@ -150,6 +154,13 @@ app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
 
 # Match request/voting routes
 app.include_router(requests.router, prefix="/api/v1", tags=["requests"])
+
+# Bowling Analysis routes (optional - requires MediaPipe)
+if BOWLING_AVAILABLE and bowling is not None:
+    app.include_router(bowling.router, prefix="/api/v1/bowling", tags=["bowling"])
+    logger.info("✓ Bowling analysis feature enabled")
+else:
+    logger.warning("✗ Bowling analysis feature disabled (MediaPipe not available)")
 
 
 # ============ Entry Point ============

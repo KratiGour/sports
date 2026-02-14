@@ -4,11 +4,42 @@ YouTube video download utilities using yt-dlp.
 
 import logging
 import uuid
+import os
+import base64
+import re
 from pathlib import Path
 from typing import Dict, Optional
 import yt_dlp
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_youtube_url(url: str) -> str:
+    """
+    Normalize YouTube URL to standard watch format.
+    Converts /live/ URLs to /watch?v= format for better compatibility.
+    
+    Args:
+        url: YouTube URL in any format
+        
+    Returns:
+        Normalized URL in /watch?v= format
+    """
+    # Extract video ID from various YouTube URL formats
+    patterns = [
+        r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/live/)([a-zA-Z0-9_-]{11})',
+        r'youtube\.com/embed/([a-zA-Z0-9_-]{11})',
+        r'youtube\.com/v/([a-zA-Z0-9_-]{11})',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            video_id = match.group(1)
+            return f'https://www.youtube.com/watch?v={video_id}'
+    
+    # If no match, return original URL
+    return url
 
 
 def download_youtube_video(
@@ -35,14 +66,31 @@ def download_youtube_video(
     Raises:
         Exception: If download fails
     """
+    # Normalize URL to standard format
+    url = normalize_youtube_url(url)
+    logger.info(f"Normalized URL: {url}")
+    
     if not video_id:
         video_id = str(uuid.uuid4())
     
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    # Check for cookies in environment (for Render production)
+    cookie_file_path = None
+    cookies_b64 = os.getenv('YOUTUBE_COOKIES_B64')
+    if cookies_b64:
+        try:
+            cookie_file_path = Path('/tmp/youtube_cookies.txt')
+            cookie_data = base64.b64decode(cookies_b64)
+            cookie_file_path.write_bytes(cookie_data)
+            logger.info("✅ Loaded YouTube cookies from YOUTUBE_COOKIES_B64 environment variable")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to decode YOUTUBE_COOKIES_B64: {e}")
+            cookie_file_path = None
+    
     # Base yt-dlp configuration (NO cookies here - added per-attempt)
     base_ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio/best[ext=mp4]/best',  # Best video + audio merged
         'outtmpl': str(output_dir / f'{video_id}.%(ext)s'),
         'quiet': False,
         'no_warnings': False,
@@ -55,31 +103,78 @@ def download_youtube_video(
         # Download restrictions
         'max_filesize': 12 * 1024 * 1024 * 1024,  # 12GB max for cricket matches
         
-        # Bot bypass strategies (cookies added per-attempt below)
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],
-                'player_skip': ['webpage', 'configs'],
-            }
-        },
         # Additional anti-bot measures
         'nocheckcertificate': True,
-        'socket_timeout': 30,
-        'ignoreerrors': False,  # Fail fast on errors
+        'socket_timeout': 60,
+        'ignoreerrors': False,
+        'http_headers': {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Sec-Fetch-Mode': 'navigate',
+        },
     }
     
     try:
         logger.info(f"Downloading YouTube video: {url}")
         
-        # Try multiple methods in sequence (cookies → no cookies)
+        # Try multiple methods in sequence with different client emulations
         download_attempts = [
-            # Attempt 1: Chrome cookies (if available)
-            {**base_ydl_opts, 'cookiesfrombrowser': ('chrome',)},
-            # Attempt 2: Firefox cookies (if available)  
-            {**base_ydl_opts, 'cookiesfrombrowser': ('firefox',)},
-            # Attempt 3: No cookies - Android client emulation only (works on Render)
-            base_ydl_opts,
+            # Attempt 1: Android client (BEST - bypasses SABR streaming & 403 errors)
+            {
+                **base_ydl_opts,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                    }
+                },
+            },
+            # Attempt 2: Android with cookies (production) or Chrome cookies (local dev)
+            {
+                **base_ydl_opts,
+                **(
+                    {'cookiefile': str(cookie_file_path)} if cookie_file_path 
+                    else {}  # Skip browser cookies if they fail
+                ),
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                    }
+                },
+                'user_agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 12; US) gzip',
+            },
+            # Attempt 3: Android TV client (more lenient than mobile)
+            {
+                **base_ydl_opts,
+                'user_agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 12; US) gzip',
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android_creator', 'android_embedded'],
+                        'player_skip': ['webpage'],
+                    }
+                },
+            },
+            # Attempt 4: iOS client
+            {
+                **base_ydl_opts,
+                'user_agent': 'com.google.ios.youtube/19.09.3 (iPhone14,5; U; CPU iOS 15_6 like Mac OS X)',
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['ios'],
+                        'player_skip': ['webpage', 'configs'],
+                    }
+                },
+            },
+            # Attempt 5: TV embedded client (works for many restricted videos)
+            {
+                **base_ydl_opts,
+                'user_agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.146 TV Safari/537.36',
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['tv_embedded'],
+                        'player_skip': ['webpage', 'configs'],
+                    }
+                },
+            },
         ]
         
         last_error = None

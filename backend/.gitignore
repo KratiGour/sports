@@ -115,6 +115,12 @@ storage/
 secrets.json
 credentials.json
 
+# YouTube Cookies 
+youtube_cookies.txt
+youtube_cookies_b64.txt
+*cookies*.txt
+*cookies*.db
+
 # OS Generated
 .DS_Store
 .DS_Store?

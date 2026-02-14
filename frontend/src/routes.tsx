@@ -18,9 +18,8 @@ import HighlightsPage from './pages/HighlightsPage';
 import VideoDetailPage from './pages/VideoDetailPage';
 import RequestsPage from './pages/RequestsPage';
 import ProfilePage from './pages/ProfilePage';
-import PlayerStatsPage from './pages/PlayerStatsPage';
-import MatchesPage from './pages/MatchesPage';
-import NotificationsPage from './pages/NotificationsPage';
+import PlayerPerformance from './pages/PlayerPerformance';
+import BowlingAnalysisPage from './pages/BowlingAnalysisPage';
 
 // ================= AUTH INITIALIZER =================
 let authInitialized = false;
@@ -150,9 +149,8 @@ export default function AppRouter() {
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/settings" element={<ProfilePage />} />
             <Route path="/player" element={<PlayerDashboard />} />
-            <Route path="/stats" element={<PlayerStatsPage />} />
-            <Route path="/matches" element={<MatchesPage />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/player/:id" element={<PlayerPerformance />} />
+            <Route path="/player/bowling" element={<BowlingAnalysisPage />} />
           </Route>
         </Route>
 
@@ -162,6 +160,7 @@ export default function AppRouter() {
             <Route element={<DashboardLayout />}>
               <Route path="/coach" element={<CoachDashboard />} />
               <Route path="/coach/upload" element={<UploadPage />} />
+              <Route path="/coach/player/:id" element={<PlayerPerformance />} />
             </Route>
           </Route>
         </Route>

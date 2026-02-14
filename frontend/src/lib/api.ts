@@ -17,7 +17,26 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('access_token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    
+    // Public routes that don't need authentication
+    const publicRoutes = ['/auth/login', '/auth/register', '/health'];
+    const isPublicRoute = publicRoutes.some(route => config.url?.includes(route));
+    
+    // Only attach token if available AND not a public route
+    if (token && config.headers && !isPublicRoute) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    // Only warn about missing token for protected routes
+    if (!token && !isPublicRoute) {
+      console.warn(`⚠️ [API] No token found for ${config.method?.toUpperCase()} ${config.url}`);
+    }
+    
+    // Log requests in development
+    if (import.meta.env.DEV) {
+      console.log(`🚀 [API] ${config.method?.toUpperCase()} ${config.url} ${token && !isPublicRoute ? '(with token)' : isPublicRoute ? '(public)' : '(NO TOKEN)'}`);
+    }
+    
     return config;
   },
   (error) => Promise.reject(error)
@@ -196,6 +215,32 @@ export const requestsApi = {
     api.patch(`/requests/${requestId}/status`, null, {
       params: { new_status: status, fulfilled_video_id: videoId },
     }),
+};
+
+// Bowling Analysis endpoints
+export const bowlingApi = {
+  /** Upload video and run biomechanics analysis */
+  analyze: (file: File, onProgress?: (progress: number) => void) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/bowling/analyze', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000, // 5 min — video processing is heavy
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
+        }
+      },
+    });
+  },
+
+  /** List current user's past analyses */
+  history: (limit = 20, offset = 0) =>
+    api.get('/bowling/history', { params: { limit, offset } }),
+
+  /** Fetch single analysis by ID */
+  getById: (analysisId: string) =>
+    api.get(`/bowling/${analysisId}`),
 };
 
 export default api;
