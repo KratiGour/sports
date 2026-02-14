@@ -18,6 +18,7 @@ const dashboardItems: Record<string, NavItem[]> = {
   PLAYER: [
     { to: "/player", icon: "fas fa-home", label: "Dashboard" },
     { to: "/player/bowling", icon: "fas fa-bowling-ball", label: "Bowling" },
+    { to: "/player/batting", icon: "fas fa-baseball-bat-ball", label: "Batting" },
     { to: "/library", icon: "fas fa-video", label: "Library" },
     { to: "/requests", icon: "fas fa-comment-dots", label: "Requests" },
     { to: "/stats", icon: "fas fa-chart-bar", label: "Stats" },

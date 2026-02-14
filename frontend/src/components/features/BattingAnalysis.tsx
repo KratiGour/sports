@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect } from "react";
-import { bowlingApi } from "../../lib/api";
+import { battingApi } from "../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Progress } from "../ui/Progress";
@@ -11,15 +11,18 @@ import {
   Download,
   History,
   ChevronRight,
-  Activity,
+  Crosshair,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Types 
-interface Biometrics {
-  avg_elbow_angle: number;
-  release_consistency: number;
+interface BattingBiometrics {
+  avg_head_alignment: number;
+  avg_stride_length: number;
+  avg_backlift_height: number;
+  avg_front_knee_angle: number;
+  avg_shoulder_rotation: number;
 }
 
 interface Feedback {
@@ -27,22 +30,32 @@ interface Feedback {
   full_text: string;
 }
 
-interface AnalysisResult {
+interface PhaseInfo {
+  stance_end: number | null;
+  stride_peak: number | null;
+  downswing_start: number | null;
+  impact: number | null;
+  followthrough_start: number | null;
+}
+
+interface BattingResult {
   id: string;
   player_id: string;
   original_filename: string | null;
-  biometrics: Biometrics;
+  biometrics: BattingBiometrics;
   feedback: Feedback;
+  phases: PhaseInfo | null;
   annotated_video_url: string | null;
   report_url: string | null;
   created_at: string;
 }
 
-interface AnalysisSummary {
+interface BattingSummary {
   id: string;
   original_filename: string | null;
-  avg_elbow_angle: number | null;
-  release_consistency: number | null;
+  avg_head_alignment: number | null;
+  avg_stride_length: number | null;
+  avg_front_knee_angle: number | null;
   report_url: string | null;
   created_at: string;
 }
@@ -50,28 +63,27 @@ interface AnalysisSummary {
 type Phase = "idle" | "uploading" | "processing" | "done" | "error";
 
 // Component 
-const BowlingAnalysis: React.FC = () => {
+const BattingAnalysis: React.FC = () => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [result, setResult] = useState<BattingResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
-  const [history, setHistory] = useState<AnalysisSummary[]>([]);
+  const [history, setHistory] = useState<BattingSummary[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
-  // Accepted formats
   const acceptedTypes = ".mp4,.mov,.avi";
 
-  // Fetch history on mount
+  // Fetch history on mount & after new analysis
   useEffect(() => {
-    bowlingApi
+    battingApi
       .history(10)
       .then((res) => setHistory(res.data.analyses ?? []))
       .catch(() => {});
-  }, [result]); // re-fetch after new analysis
+  }, [result]);
 
-  //  Handlers 
+  // Handlers 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const f = e.target.files?.[0];
@@ -93,12 +105,12 @@ const BowlingAnalysis: React.FC = () => {
 
     try {
       setPhase("uploading");
-      const res = await bowlingApi.analyze(file, (p) => {
+      const res = await battingApi.analyze(file, (p) => {
         setUploadProgress(p);
         if (p >= 100) setPhase("processing");
       });
 
-      setResult(res.data as AnalysisResult);
+      setResult(res.data as BattingResult);
       setPhase("done");
     } catch (err: unknown) {
       const msg =
@@ -131,11 +143,11 @@ const BowlingAnalysis: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Activity className="h-6 w-6 text-emerald-400" />
-            Bowling Analysis
+            <Crosshair className="h-6 w-6 text-amber-400" />
+            Batting Analysis
           </h2>
           <p className="text-slate-400 text-sm mt-1">
-            Upload your bowling video for AI-powered biomechanics feedback
+            Upload your batting video for AI-powered biomechanics feedback
           </p>
         </div>
         <Button
@@ -177,15 +189,18 @@ const BowlingAnalysis: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-slate-400 shrink-0 ml-4">
-                      {h.avg_elbow_angle != null && (
-                        <span>Elbow {h.avg_elbow_angle.toFixed(1)}°</span>
+                      {h.avg_head_alignment != null && (
+                        <span>Head {h.avg_head_alignment.toFixed(2)}</span>
+                      )}
+                      {h.avg_front_knee_angle != null && (
+                        <span>Knee {h.avg_front_knee_angle.toFixed(1)}°</span>
                       )}
                       {h.report_url && (
                         <a
                           href={reportFullUrl(h.report_url)!}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-emerald-400 hover:underline flex items-center gap-0.5"
+                          className="text-amber-400 hover:underline flex items-center gap-0.5"
                         >
                           PDF <ChevronRight className="h-3 w-3" />
                         </a>
@@ -202,7 +217,7 @@ const BowlingAnalysis: React.FC = () => {
       {/* Upload card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Upload Bowling Video</CardTitle>
+          <CardTitle className="text-base">Upload Batting Video</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* File picker */}
@@ -211,13 +226,13 @@ const BowlingAnalysis: React.FC = () => {
             className={cn(
               "flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-10 cursor-pointer transition-colors",
               file
-                ? "border-emerald-500/50 bg-emerald-500/5"
+                ? "border-amber-500/50 bg-amber-500/5"
                 : "border-slate-700 hover:border-slate-500 bg-slate-800/30"
             )}
           >
             {file ? (
               <>
-                <FileVideo className="h-8 w-8 text-emerald-400 mb-2" />
+                <FileVideo className="h-8 w-8 text-amber-400 mb-2" />
                 <p className="text-sm text-slate-200 truncate max-w-xs">
                   {file.name}
                 </p>
@@ -297,24 +312,56 @@ const BowlingAnalysis: React.FC = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                  <CheckCircle2 className="h-5 w-5 text-amber-400" />
                   Biomechanics Summary
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <MetricTile
-                    label="Avg Elbow Angle"
-                    value={`${result.biometrics.avg_elbow_angle.toFixed(1)}°`}
+                    label="Head Alignment"
+                    value={result.biometrics.avg_head_alignment.toFixed(2)}
+                    subtitle="0 = back foot, 1 = front foot"
                   />
                   <MetricTile
-                    label="Release Consistency"
-                    value={result.biometrics.release_consistency.toFixed(4)}
-                    subtitle="(lower = better)"
+                    label="Stride Length"
+                    value={result.biometrics.avg_stride_length.toFixed(3)}
+                    subtitle="Normalized distance"
+                  />
+                  <MetricTile
+                    label="Backlift Height"
+                    value={result.biometrics.avg_backlift_height.toFixed(3)}
+                    subtitle="Wrist Y position"
+                  />
+                  <MetricTile
+                    label="Front Knee Angle"
+                    value={`${result.biometrics.avg_front_knee_angle.toFixed(1)}°`}
+                  />
+                  <MetricTile
+                    label="Shoulder Rotation"
+                    value={`${result.biometrics.avg_shoulder_rotation.toFixed(1)}°`}
                   />
                 </div>
               </CardContent>
             </Card>
+
+            {/* Phase Detection */}
+            {result.phases && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Phase Detection (Frame #)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center text-sm">
+                    <PhaseBlock label="Stance End" frame={result.phases.stance_end} color="blue" />
+                    <PhaseBlock label="Stride Peak" frame={result.phases.stride_peak} color="green" />
+                    <PhaseBlock label="Downswing" frame={result.phases.downswing_start} color="yellow" />
+                    <PhaseBlock label="Impact" frame={result.phases.impact} color="red" />
+                    <PhaseBlock label="Follow-Through" frame={result.phases.followthrough_start} color="purple" />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Pose-Annotated Video */}
             {result.annotated_video_url && (
@@ -328,21 +375,20 @@ const BowlingAnalysis: React.FC = () => {
                       controls
                       preload="metadata"
                       className="w-full h-auto max-h-[600px]"
-                      src={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${result.annotated_video_url}`}
+                      src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${result.annotated_video_url}`}
                       onError={(e) => {
                         console.error("Video load error:", e);
-                        console.log("Video URL:", `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${result.annotated_video_url}`);
                       }}
                     >
-                      <source 
-                        src={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${result.annotated_video_url}`}
+                      <source
+                        src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${result.annotated_video_url}`}
                         type="video/mp4"
                       />
                       Your browser does not support video playback.
                     </video>
                   </div>
                   <p className="text-xs text-slate-400 mt-2 text-center">
-                    🟡 Yellow dots = joint positions | ⚪ White lines = skeleton connections
+                    Joint positions and skeleton connections detected via MediaPipe
                   </p>
                 </CardContent>
               </Card>
@@ -355,46 +401,55 @@ const BowlingAnalysis: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {result.feedback.full_text.split('\n\n').map((paragraph, idx) => {
-                    // Check if paragraph is a heading (starts with ** or #)
-                    const isHeading = paragraph.trim().startsWith('**') || paragraph.trim().startsWith('#');
-                    
-                    // Clean up markdown symbols for display
+                  {result.feedback.full_text.split("\n\n").map((paragraph, idx) => {
+                    const isHeading =
+                      paragraph.trim().startsWith("**") ||
+                      paragraph.trim().startsWith("#");
+
                     const cleanText = paragraph
-                      .replace(/\*\*/g, '')
-                      .replace(/#{1,6}\s/g, '')
+                      .replace(/\*\*/g, "")
+                      .replace(/#{1,6}\s/g, "")
                       .trim();
-                    
+
                     if (isHeading) {
                       return (
-                        <h3 key={idx} className="text-lg font-bold text-emerald-400 mt-4">
+                        <h3
+                          key={idx}
+                          className="text-lg font-bold text-amber-400 mt-4"
+                        >
                           {cleanText}
                         </h3>
                       );
                     }
-                    
-                    if (cleanText.startsWith('*') || cleanText.startsWith('-')) {
-                      // Bullet point
+
+                    if (cleanText.startsWith("*") || cleanText.startsWith("-")) {
                       return (
-                        <div key={idx} className="pl-4 text-slate-300 leading-relaxed">
-                          <span className="text-emerald-400 mr-2">•</span>
-                          {cleanText.replace(/^[*-]\s*/, '')}
+                        <div
+                          key={idx}
+                          className="pl-4 text-slate-300 leading-relaxed"
+                        >
+                          <span className="text-amber-400 mr-2">•</span>
+                          {cleanText.replace(/^[*-]\s*/, "")}
                         </div>
                       );
                     }
-                    
-                    if (cleanText.includes(':')) {
-                      // Label: Value format
-                      const [label, ...valueParts] = cleanText.split(':');
-                      const value = valueParts.join(':');
+
+                    if (cleanText.includes(":")) {
+                      const [label, ...valueParts] = cleanText.split(":");
+                      const value = valueParts.join(":");
                       return (
-                        <p key={idx} className="text-slate-300 leading-relaxed">
-                          <span className="font-semibold text-slate-100">{label}:</span>
+                        <p
+                          key={idx}
+                          className="text-slate-300 leading-relaxed"
+                        >
+                          <span className="font-semibold text-slate-100">
+                            {label}:
+                          </span>
                           {value}
                         </p>
                       );
                     }
-                    
+
                     return (
                       <p key={idx} className="text-slate-300 leading-relaxed">
                         {cleanText}
@@ -447,4 +502,36 @@ function MetricTile({
   );
 }
 
-export default BowlingAnalysis;
+const phaseColorMap: Record<string, string> = {
+  blue: "border-blue-500/40 bg-blue-500/10 text-blue-300",
+  green: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+  yellow: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300",
+  red: "border-red-500/40 bg-red-500/10 text-red-300",
+  purple: "border-purple-500/40 bg-purple-500/10 text-purple-300",
+};
+
+function PhaseBlock({
+  label,
+  frame,
+  color,
+}: {
+  label: string;
+  frame: number | null;
+  color: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border p-3",
+        phaseColorMap[color] ?? phaseColorMap.blue
+      )}
+    >
+      <p className="text-xs uppercase tracking-wider opacity-70">{label}</p>
+      <p className="text-lg font-bold mt-1">
+        {frame != null ? `#${frame}` : "—"}
+      </p>
+    </div>
+  );
+}
+
+export default BattingAnalysis;

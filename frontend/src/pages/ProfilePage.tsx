@@ -21,9 +21,7 @@ export default function ProfilePage() {
     try {
       await authApi.updateProfile({
         name: formData.name,
-        team: formData.team,
         phone: formData.phone,
-        jersey_number: Number(formData.jerseyNumber),
         team: formData.team,
         profile_bio: formData.bio,
       });

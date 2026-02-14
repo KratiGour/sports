@@ -14,6 +14,7 @@ from database.models.video import (
     EventType,
 )
 from database.models.bowling import BowlingAnalysis
+from database.models.batting import BattingAnalysis
 
 __all__ = [
     # User models
@@ -29,6 +30,8 @@ __all__ = [
     "UserVote",
     # Bowling
     "BowlingAnalysis",
+    # Batting
+    "BattingAnalysis",
     # Enums
     "VideoVisibility",
     "VideoStatus",

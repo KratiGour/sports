@@ -46,7 +46,6 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         email=user_data.email,
         password_hash=hashed_password,
         name=user_data.name,
-        name=user_data.name,
         role=user_data.role,
     )
 
@@ -129,12 +128,6 @@ def logout(
 
     logger.info(
         f"User logged out: {current_user.email} (ID: {current_user.id})")
-    db.query(UserSession).filter(
-        UserSession.user_id == current_user.id).delete()
-    db.commit()
-
-    logger.info(
-        f"User logged out: {current_user.email} (ID: {current_user.id})")
 
     return None
 
@@ -161,14 +154,6 @@ def update_current_user(
 
     db.commit()
     db.refresh(current_user)
-    full_name: str = None,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-
-    if full_name:
-        current_user.full_name = full_name
-        db.commit()
-        db.refresh(current_user)
-        logger.info(f"User profile updated: {current_user.email}")
+    logger.info(f"User profile updated: {current_user.email}")
 
     return current_user

@@ -1,13 +1,17 @@
 import cv2
 import numpy as np
 import os
+import subprocess
 import time
+import logging
 import pandas as pd
 from google import genai
 from dotenv import load_dotenv
 from PIL import Image
 from fpdf import FPDF
 import io
+
+logger = logging.getLogger(__name__)
 
 # MediaPipe imports with comprehensive fallback strategy
 mp_pose_module = None
@@ -302,6 +306,32 @@ if MEDIAPIPE_AVAILABLE:
                 
             cap.release()
             out.release()
+
+            # Optimize video for web streaming - re-encode to H.264 with faststart
+            try:
+                temp_optimized = output_path.replace(".mp4", "_optimized.mp4")
+                subprocess.run(
+                    [
+                        "ffmpeg", "-i", output_path,
+                        "-c:v", "libx264",  # Re-encode to H.264 (web-compatible)
+                        "-preset", "fast",  # Encoding speed vs compression
+                        "-crf", "23",  # Constant Rate Factor (quality: 0=lossless, 51=worst)
+                        "-movflags", "+faststart",  # Move moov atom to beginning
+                        "-y",  # Overwrite if exists
+                        temp_optimized
+                    ],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=120  # Allow more time for re-encoding
+                )
+                # Replace original with optimized version
+                os.replace(temp_optimized, output_path)
+                logger.info(f"Video optimized for web streaming (H.264)")
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Video optimization timed out - using original")
+            except Exception as e:
+                logger.warning(f"Video optimization failed (using original): {e}")
             
             df = pd.DataFrame(metrics)
             display_df = pd.DataFrame()

@@ -89,7 +89,7 @@ async def analyze_bowling(
     background_tasks.add_task(_cleanup_file, temp_video_path)
 
     try:
-        # --- Biomechanics ---
+        # Biomechanics
         raw_df, display_df, images, annotated_video_path = analyzer.process_video(str(temp_video_path))
 
         if display_df.empty:
@@ -104,7 +104,7 @@ async def analyze_bowling(
         shutil.move(annotated_video_path, final_video_path)
         annotated_video_url = f"/static/bowling_videos/{video_filename}"
 
-        # --- AI Feedback ---
+        # AI Feedback
         prompt = (
             "You are a professional elite cricket bowling coach and biomechanics analyst.\n"
             "Analyze this fast bowler's technique using the provided biomechanical metrics.\n\n"
@@ -146,9 +146,9 @@ async def analyze_bowling(
         )
         feedback_text = gemini.call_gemini(prompt, str(temp_video_path))
 
-        # --- PDF Report ---
+        # PDF Report
         pdf_bytes = create_pdf(feedback_text, display_df, images)
-        report_filename = f"report_{file_id}.pdf"
+        report_filename = f"bowling_report_{file_id}.pdf"
         report_path = REPORTS_DIR / report_filename
 
         with open(report_path, "wb") as f:
@@ -156,7 +156,7 @@ async def analyze_bowling(
 
         report_url = f"/static/reports/{report_filename}"
 
-        # --- Biometrics extraction from raw DataFrame (before column renaming) ---
+        # Extract summary biometrics from raw DataFrame (before column renaming)
         if not raw_df.empty and 'r_elbow_angle' in raw_df.columns:
             avg_elbow = float(round(raw_df['r_elbow_angle'].mean(), 2))
             release_cons = float(round(raw_df['r_wrist_y'].std(), 4))
@@ -166,7 +166,7 @@ async def analyze_bowling(
         
         summary_stats = display_df.describe().T
 
-        # --- Persist to DB ---
+        # Persist to DB
         analysis = create_bowling_analysis(
             db,
             player_id=current_user.id,
@@ -199,7 +199,7 @@ async def analyze_bowling(
         raise
     except Exception as e:
         error_msg = f"Analysis failed: {type(e).__name__}: {str(e)}"
-        logger.exception(f"🚨 BOWLING ERROR - {error_msg}")
+        logger.exception(f"BOWLING ERROR - {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
 
 

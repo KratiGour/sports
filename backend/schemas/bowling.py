@@ -7,8 +7,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 
 
-# --- Response Schemas ---
-
+# Response Schemas for Bowling Analysis
 class BiometricsResponse(BaseModel):
     """Core biomechanics measurements."""
     avg_elbow_angle: float = Field(0.0, description="Average right elbow angle in degrees")

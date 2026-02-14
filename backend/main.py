@@ -12,7 +12,8 @@ from database.config import SessionLocal, engine, Base
 # Import all models to ensure they're registered with SQLAlchemy
 from database.models import (
     User, UserSession, ProcessingJob,
-    Video, HighlightEvent, HighlightJob, MatchRequest, UserVote
+    Video, HighlightEvent, HighlightJob, MatchRequest, UserVote,
+    BattingAnalysis,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -26,6 +27,7 @@ STORAGE_DIRS = [
     "storage/highlight",
     "storage/reports",
     "storage/bowling_videos",
+    "storage/batting_videos",
 ]
 for dir_path in STORAGE_DIRS:
     Path(dir_path).mkdir(parents=True, exist_ok=True)
@@ -105,10 +107,10 @@ app.mount("/static/clips", StaticFiles(directory="storage/trimmed"), name="clips
 app.mount("/static/highlights", StaticFiles(directory="storage/highlight"), name="highlights")
 app.mount("/static/reports", StaticFiles(directory="storage/reports"), name="reports")
 app.mount("/static/bowling_videos", StaticFiles(directory="storage/bowling_videos"), name="bowling_videos")
+app.mount("/static/batting_videos", StaticFiles(directory="storage/batting_videos"), name="batting_videos")
 
 
-# ============ Health Check Endpoints ============
-
+# Health Check Endpoints 
 @app.get("/", tags=["health"])
 def read_root():
     """Root endpoint - API info."""
@@ -139,9 +141,8 @@ def db_health_check():
         return {"status": "error", "database": "disconnected", "detail": str(e)}
 
 
-# ============ Include API Routers ============
-
-from api.routes import auth, videos, jobs, requests, bowling, BOWLING_AVAILABLE
+# Include API Routers 
+from api.routes import auth, videos, jobs, requests, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
@@ -155,16 +156,22 @@ app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
 # Match request/voting routes
 app.include_router(requests.router, prefix="/api/v1", tags=["requests"])
 
-# Bowling Analysis routes (optional - requires MediaPipe)
+# Bowling Analysis routes
 if BOWLING_AVAILABLE and bowling is not None:
     app.include_router(bowling.router, prefix="/api/v1/bowling", tags=["bowling"])
-    logger.info("✓ Bowling analysis feature enabled")
+    logger.info("Bowling analysis feature enabled")
 else:
-    logger.warning("✗ Bowling analysis feature disabled (MediaPipe not available)")
+    logger.warning("Bowling analysis feature disabled (MediaPipe not available)")
+
+# Batting Analysis routes)
+if BATTING_AVAILABLE and batting is not None:
+    app.include_router(batting.router, prefix="/api/v1/batting", tags=["batting"])
+    logger.info("Batting analysis feature enabled")
+else:
+    logger.warning("Batting analysis feature disabled (MediaPipe not available)")
 
 
-# ============ Entry Point ============
-
+# Entry Point 
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",

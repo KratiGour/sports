@@ -20,8 +20,9 @@ import RequestsPage from './pages/RequestsPage';
 import ProfilePage from './pages/ProfilePage';
 import PlayerPerformance from './pages/PlayerPerformance';
 import BowlingAnalysisPage from './pages/BowlingAnalysisPage';
+import BattingAnalysisPage from './pages/BattingAnalysisPage';
 
-// ================= AUTH INITIALIZER =================
+// Auth Initializer (runs once on module load) 
 let authInitialized = false;
 
 function initializeAuthOnce() {
@@ -48,24 +49,24 @@ function initializeAuthOnce() {
   }
 }
 
-// Initialize immediately
+// Initialize immediately on module load
 initializeAuthOnce();
 
-// ================= PROTECTED ROUTE =================
+// Protected Route - Requires authentication
 function ProtectedRoute() {
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-
+  
   const shouldRedirect = useMemo(() => !isAuthenticated, [isAuthenticated]);
-
+  
   if (shouldRedirect) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
-
+  
   return <Outlet />;
 }
 
-// ================= ROLE GUARD =================
+// Role Guard - Restricts access based on user role
 interface RoleGuardProps {
   allowedRoles: UserRole[];
   fallbackPath?: string;
@@ -86,7 +87,7 @@ function RoleGuard({ allowedRoles, fallbackPath = '/player' }: RoleGuardProps) {
   return <Outlet />;
 }
 
-// ================= GUEST ROUTE =================
+// Guest Route - Only accessible when NOT authenticated
 function GuestRoute() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
@@ -105,7 +106,7 @@ function GuestRoute() {
   return <Outlet />;
 }
 
-// ================= DASHBOARD REDIRECT =================
+// Dashboard Redirect - Routes to role-specific dashboard
 function DashboardRedirect() {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -124,7 +125,7 @@ function DashboardRedirect() {
   return <Navigate to={targetPath} replace />;
 }
 
-// ================= APP ROUTER =================
+// App Router
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -151,6 +152,7 @@ export default function AppRouter() {
             <Route path="/player" element={<PlayerDashboard />} />
             <Route path="/player/:id" element={<PlayerPerformance />} />
             <Route path="/player/bowling" element={<BowlingAnalysisPage />} />
+            <Route path="/player/batting" element={<BattingAnalysisPage />} />
           </Route>
         </Route>
 
