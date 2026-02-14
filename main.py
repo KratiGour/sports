@@ -11,10 +11,14 @@ Usage:
 """
 import sys
 from pathlib import Path
+from api.routes import player
+app.include_router(player.router)
+
 
 # Add backend/scripts to Python path for imports
 backend_scripts = Path(__file__).parent / "backend" / "scripts"
 sys.path.insert(0, str(backend_scripts))
+
 
 def main():
     """Main entry point - delegates to ocr_engine CLI."""
@@ -32,6 +36,7 @@ def main():
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

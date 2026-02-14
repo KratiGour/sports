@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from "react-router-dom";
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -37,7 +38,8 @@ interface UserRequest {
   created_at: string;
 }
 
-export default function PlayerDashboard() {
+export default function PlayerDashboard(){
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const [recentVideos, setRecentVideos] = useState<VideoSummary[]>([]);
   const [myRequests, setMyRequests] = useState<UserRequest[]>([]);
@@ -162,46 +164,58 @@ export default function PlayerDashboard() {
               <i className="fas fa-video"></i>
               Library
             </Link>
+            <button
+              onClick={() => navigate("/profile")}
+              className="px-4 py-2 rounded-xl glass border border-white/20
+             hover:bg-white/10 transition-all duration-300 text-sm
+             flex items-center gap-2"
+            >
+              <i className="fas fa-user-edit"></i>
+              Profile
+            </button>
           </div>
         </div>
-      </motion.div>
+      </motion.div >
 
       {/* Stats Cards */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((s, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.5, delay: i * 0.1 }}
-            whileHover={{ scale: 1.05, y: -5 }}
-            className="glass rounded-2xl p-6 border border-white/20 hover:border-white/30 transition-all duration-300 group cursor-pointer"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-r ${s.color} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
-                <i className={`${s.icon} text-white text-lg`}></i>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6" >
+        {
+          stats.map((s, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.5, delay: i * 0.1 }}
+              whileHover={{ scale: 1.05, y: -5 }}
+              className="glass rounded-2xl p-6 border border-white/20 hover:border-white/30 transition-all duration-300 group cursor-pointer"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-r ${s.color} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
+                  <i className={`${s.icon} text-white text-lg`}></i>
+                </div>
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
               </div>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            </div>
-            <p className="text-sm text-white/60 mb-2">{s.title}</p>
-            <p className="text-2xl font-bold mb-3">{loadingVideos || loadingRequests ? '...' : s.value}</p>
-            <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-              <motion.div 
-                className={`h-full bg-gradient-to-r ${s.color} rounded-full`}
-                initial={{ width: 0 }}
-                animate={{ width: "75%" }}
-                transition={{ duration: 1, delay: i * 0.2 }}
-              />
-            </div>
-          </motion.div>
-        ))}
+              <p className="text-sm text-white/60 mb-2">{s.title}</p>
+              <p className="text-2xl font-bold mb-3">{loadingVideos || loadingRequests ? '...' : s.value}</p>
+              <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+                <motion.div
+                  className={`h-full bg-gradient-to-r ${s.color} rounded-full`}
+                  initial={{ width: 0 }}
+                  animate={{ width: "75%" }}
+                  transition={{ duration: 1, delay: i * 0.2 }}
+                />
+              </div>
+            </motion.div>
+          ))
+        }
       </div>
 
       {/* Charts Row */}
-      <div className="grid lg:grid-cols-2 gap-6">
+      < div className="grid lg:grid-cols-2 gap-6" >
         {/* Activity Trend */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
+        < motion.div
+          initial={{ opacity: 0, x: -20 }
+          }
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6 }}
           className="glass rounded-3xl p-6 border border-white/20 hover:border-white/30 transition-all duration-300"
@@ -222,18 +236,17 @@ export default function PlayerDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                 <XAxis dataKey="day" stroke="rgba(255,255,255,0.6)" />
                 <YAxis stroke="rgba(255,255,255,0.6)" />
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: 'rgba(0,0,0,0.8)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    borderRadius: '12px',
-                    color: 'white'
-                  }}
+                <Tooltip contentStyle={{
+                  backgroundColor: 'rgba(0,0,0,0.8)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '12px',
+                  color: 'white'
+                }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="events" 
-                  stroke="url(#lineGradient)" 
+                <Line
+                  type="monotone"
+                  dataKey="events"
+                  stroke="url(#lineGradient)"
                   strokeWidth={3}
                   dot={{ fill: '#60A5FA', strokeWidth: 2, r: 6 }}
                   activeDot={{ r: 8, fill: '#3B82F6' }}
@@ -247,10 +260,10 @@ export default function PlayerDashboard() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </motion.div>
+        </motion.div >
 
         {/* Video Stats Bar Chart */}
-        <motion.div
+        < motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
@@ -273,7 +286,7 @@ export default function PlayerDashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                   <XAxis dataKey="name" stroke="rgba(255,255,255,0.6)" />
                   <YAxis stroke="rgba(255,255,255,0.6)" />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{
                       backgroundColor: 'rgba(0,0,0,0.8)',
                       border: '1px solid rgba(255,255,255,0.2)',
@@ -295,13 +308,14 @@ export default function PlayerDashboard() {
               </div>
             )}
           </div>
-        </motion.div>
-      </div>
+        </motion.div >
+      </div >
+
 
       {/* Recent Highlights & Requests */}
-      <div className="grid lg:grid-cols-3 gap-6">
+      < div className="grid lg:grid-cols-3 gap-6" >
         {/* Recent Highlights */}
-        <motion.div
+        < motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
@@ -322,57 +336,112 @@ export default function PlayerDashboard() {
             </Link>
           </div>
 
-          {loadingVideos ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="glass rounded-2xl p-4 border border-white/10 animate-pulse">
-                  <div className="h-4 bg-white/10 rounded w-3/4 mb-2"></div>
-                  <div className="h-3 bg-white/10 rounded w-1/2"></div>
-                </div>
-              ))}
-            </div>
-          ) : recentVideos.length === 0 ? (
-            <div className="text-center py-12">
-              <i className="fas fa-video text-4xl text-white/20 mb-4"></i>
-              <p className="text-white/60">No highlights available yet</p>
-              <p className="text-sm text-white/40 mt-1">Request a match to get started!</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentVideos.slice(0, 4).map((video, i) => (
-                <motion.div
-                  key={video.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                >
-                  <Link
-                    to={`/video/${video.id}`}
-                    className="glass rounded-2xl p-4 border border-white/10 hover:border-white/20 transition-all duration-300 flex items-center justify-between group"
+          {
+            loadingVideos ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="glass rounded-2xl p-4 border border-white/10 animate-pulse">
+                    <div className="h-4 bg-white/10 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-white/10 rounded w-1/2"></div>
+                  </div>
+                ))}
+              </div>
+            ) : recentVideos.length === 0 ? (
+              <div className="text-center py-12">
+                <i className="fas fa-video text-4xl text-white/20 mb-4"></i>
+                <p className="text-white/60">No highlights available yet</p>
+                <p className="text-sm text-white/40 mt-1">Request a match to get started!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentVideos.slice(0, 4).map((video, i) => (
+                  <motion.div
+                    key={video.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.1 }}
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
-                        <i className="fas fa-play text-sm"></i>
+                    <Link
+                      to={`/video/${video.id}`}
+                      className="glass rounded-2xl p-4 border border-white/10 hover:border-white/20 transition-all duration-300 flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
+                          <i className="fas fa-play text-sm"></i>
+                        </div>
+                        <div>
+                          <p className="font-medium group-hover:text-blue-400 transition-colors">{video.title}</p>
+                          <p className="text-xs text-white/50">{video.teams || 'Cricket Match'}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium group-hover:text-blue-400 transition-colors">{video.title}</p>
-                        <p className="text-xs text-white/50">{video.teams || 'Cricket Match'}</p>
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className="text-blue-400">{video.total_fours} 4s</span>
+                        <span className="text-green-400">{video.total_sixes} 6s</span>
+                        <span className="text-red-400">{video.total_wickets} W</span>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs">
-                      <span className="text-blue-400">{video.total_fours} 4s</span>
-                      <span className="text-green-400">{video.total_sixes} 6s</span>
-                      <span className="text-red-400">{video.total_wickets} W</span>
-                    </div>
-                  </Link>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </motion.div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            )
+          }
+        </motion.div >
 
         {/* Quick Actions & Requests */}
-        <motion.div
+        <motion.div>
+          {
+            loadingVideos ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="glass rounded-2xl p-4 border border-white/10 animate-pulse">
+                    <div className="h-4 bg-white/10 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-white/10 rounded w-1/2"></div>
+                  </div>
+                ))}
+              </div>
+            ) : recentVideos.length === 0 ? (
+              <div className="text-center py-12">
+                <i className="fas fa-video text-4xl text-white/20 mb-4"></i>
+                <p className="text-white/60">No highlights available yet</p>
+                <p className="text-sm text-white/40 mt-1">Request a match to get started!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentVideos.slice(0, 4).map((video, i) => (
+                  <motion.div
+                    key={video.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                  >
+                    <Link
+                      to={`/video/${video.id}`}
+                      className="glass rounded-2xl p-4 border border-white/10 hover:border-white/20 transition-all duration-300 flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
+                          <i className="fas fa-play text-sm"></i>
+                        </div>
+                        <div>
+                          <p className="font-medium group-hover:text-blue-400 transition-colors">{video.title}</p>
+                          <p className="text-xs text-white/50">{video.teams || 'Cricket Match'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className="text-blue-400">{video.total_fours} 4s</span>
+                        <span className="text-green-400">{video.total_sixes} 6s</span>
+                        <span className="text-red-400">{video.total_wickets} W</span>
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            )
+          }
+        </motion.div >
+
+        {/* Quick Actions & Requests */}
+        < motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
@@ -432,23 +501,25 @@ export default function PlayerDashboard() {
           </div>
 
           {/* Recent Requests Mini */}
-          {myRequests.length > 0 && (
-            <div className="mt-6 pt-6 border-t border-white/10">
-              <p className="text-sm font-medium text-white/60 mb-3">Your Requests</p>
-              <div className="space-y-2">
-                {myRequests.slice(0, 3).map((req) => (
-                  <div key={req.id} className="flex items-center justify-between text-xs">
-                    <span className="text-white/80 truncate max-w-[120px]">
-                      {req.match_title || 'Match'}
-                    </span>
-                    {getStatusBadge(req.status)}
-                  </div>
-                ))}
+          {
+            myRequests.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-white/10">
+                <p className="text-sm font-medium text-white/60 mb-3">Your Requests</p>
+                <div className="space-y-2">
+                  {myRequests.slice(0, 3).map((req) => (
+                    <div key={req.id} className="flex items-center justify-between text-xs">
+                      <span className="text-white/80 truncate max-w-[120px]">
+                        {req.match_title || 'Match'}
+                      </span>
+                      {getStatusBadge(req.status)}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </motion.div>
-      </div>
+            )
+          }
+        </motion.div >
+      </div >
 
       {/* Request Match Modal */}
       <RequestMatchModal
@@ -458,4 +529,4 @@ export default function PlayerDashboard() {
       />
     </div>
   );
-}
+} 

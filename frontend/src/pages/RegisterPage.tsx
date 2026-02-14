@@ -51,6 +51,9 @@ export default function RegisterPage() {
         email: formData.email,
         password: formData.password,
         role: formData.role,
+        //phone: formData.phone || null,
+        jersey_number: formData.jerseyNumber || null,
+        team: formData.team || null,
         phone: formData.phone || null,
         jersey_number: formData.jerseyNumber || null,
         team: formData.team || null,
@@ -202,11 +205,11 @@ export default function RegisterPage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setFormData({ ...formData, role: 'PLAYER' })}
-                  className={`px-4 py-3 rounded-xl border transition-all duration-300 ${
-                    formData.role === 'PLAYER'
-                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 border-transparent text-white'
-                      : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:border-white/20'
-                  }`}
+                  className={`px-4 py-3 rounded-xl border transition-all duration-300 ${formData.role === 'PLAYER'
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 border-transparent text-white'
+                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:border-white/20'
+                    }`}
+
                 >
                   <i className="fas fa-running mr-2"></i>
                   Player
@@ -216,11 +219,10 @@ export default function RegisterPage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setFormData({ ...formData, role: 'COACH' })}
-                  className={`px-4 py-3 rounded-xl border transition-all duration-300 ${
-                    formData.role === 'COACH'
-                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 border-transparent text-white'
-                      : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:border-white/20'
-                  }`}
+                  className={`px-4 py-3 rounded-xl border transition-all duration-300 ${formData.role === 'COACH'
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 border-transparent text-white'
+                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:border-white/20'
+                    }`}
                 >
                   <i className="fas fa-chalkboard-teacher mr-2"></i>
                   Coach

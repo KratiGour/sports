@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 )
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
     # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    existing_user = db.query(User).filter(
+        User.email == user_data.email).first()
+    existing_user = db.query(User).filter(
+        User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
@@ -42,7 +45,8 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     new_user = User(
         email=user_data.email,
         password_hash=hashed_password,
-        name=user_data.name,  
+        name=user_data.name,
+        name=user_data.name,
         role=user_data.role,
     )
 
@@ -69,18 +73,23 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
 
     # Update last_login timestamp
     user.last_login = datetime.utcnow()
-    
+
     # Create access token
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    # Create access token
+    access_token_expires = timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email, "role": user.role}, expires_delta=access_token_expires
     )
 
     # Create refresh token
     refresh_token = create_refresh_token(
-        data = {"sub": user.email}
+        data={"sub": user.email}
     )
-    
+
     # Create session record
     session = UserSession(
         user_id=user.id,
@@ -103,6 +112,8 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
             "email": user.email,
             "full_name": user.name,  # User model has 'name' field
             "role": user.role,
+            "team": user.team,
+            "jersey_number": user.jersey_number,
         },
     }
 
@@ -112,10 +123,18 @@ def logout(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     # Delete all active sessions for this user
-    db.query(UserSession).filter(UserSession.user_id == current_user.id).delete()
+    db.query(UserSession).filter(
+        UserSession.user_id == current_user.id).delete()
     db.commit()
 
-    logger.info(f"User logged out: {current_user.email} (ID: {current_user.id})")
+    logger.info(
+        f"User logged out: {current_user.email} (ID: {current_user.id})")
+    db.query(UserSession).filter(
+        UserSession.user_id == current_user.id).delete()
+    db.commit()
+
+    logger.info(
+        f"User logged out: {current_user.email} (ID: {current_user.id})")
 
     return None
 
@@ -127,10 +146,25 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
 
 @router.put("/me", response_model=UserResponse)
 def update_current_user(
-    full_name: str = None,
+    name: str | None = None,
+    team: str | None = None,
+    jersey_number: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if name is not None:
+        current_user.name = name
+    if team is not None:
+        current_user.team = team
+    if jersey_number is not None:
+        current_user.jersey_number = jersey_number
+
+    db.commit()
+    db.refresh(current_user)
+    full_name: str = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+
     if full_name:
         current_user.full_name = full_name
         db.commit()
