@@ -7,7 +7,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 // Create axios instance
 export const api = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
-  timeout: 30000,
+  timeout: 300000, // 5 min default, overridden per-endpoint for long operations
   headers: {
     'Content-Type': 'application/json',
   },
@@ -282,7 +282,7 @@ export const bowlingApi = {
     formData.append('file', file);
     return api.post('/bowling/analyze', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000, // 5 min — video processing is heavy
+      timeout: 1800000, // 30 min — large videos (900MB+) need time for frame-by-frame MediaPipe processing
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
           onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
@@ -308,7 +308,7 @@ export const battingApi = {
     formData.append('file', file);
     return api.post('/batting/analyze', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000, // 5 min — video processing is heavy
+      timeout: 1800000, // 30 min — large videos (900MB+) need time for frame-by-frame MediaPipe processing
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
           onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
@@ -324,6 +324,87 @@ export const battingApi = {
   /** Fetch single batting analysis by ID */
   getById: (analysisId: string) =>
     api.get(`/batting/${analysisId}`),
+};
+
+// Submissions Pipeline
+export interface SubmissionSummary {
+  id: string;
+  player_id: string;
+  coach_id: string;
+  player_name?: string;
+  coach_name?: string;
+  original_filename: string;
+  analysis_type: string;
+  status: 'PENDING' | 'PROCESSING' | 'DRAFT_REVIEW' | 'PUBLISHED';
+  created_at: string;
+  analyzed_at?: string;
+  published_at?: string;
+  pdf_report_url?: string;
+}
+
+export interface SubmissionDetail extends SubmissionSummary {
+  video_url: string;
+  raw_biometrics?: {
+    records: Record<string, number>[];
+    summary: Record<string, Record<string, number>>;
+  };
+  phase_info?: Record<string, number | null>;
+  annotated_video_url?: string;
+  key_frame_url?: string;
+  ai_draft_text?: string;
+  coach_final_text?: string;
+}
+
+export interface CoachListItem {
+  id: string;
+  name: string;
+  email: string;
+  team?: string;
+}
+
+export const submissionsApi = {
+  /** List available coaches for the player's dropdown */
+  listCoaches: () =>
+    api.get<{ coaches: CoachListItem[] }>('/submissions/coaches'),
+
+  /** Player: Upload video to a coach */
+  upload: (file: File, coachId: string, analysisType: string = 'BATTING', onProgress?: (p: number) => void) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('coach_id', coachId);
+    formData.append('analysis_type', analysisType);
+    return api.post<SubmissionDetail>('/submissions/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+      onUploadProgress: (e) => {
+        if (e.total && onProgress) onProgress(Math.round((e.loaded * 100) / e.total));
+      },
+    });
+  },
+
+  /** Player: My published reports */
+  playerReports: (limit = 50, offset = 0) =>
+    api.get<{ submissions: SubmissionSummary[]; total: number }>('/submissions/player/me', { params: { limit, offset } }),
+
+  /** Player: All my submissions (all statuses) */
+  playerAll: (limit = 50, offset = 0) =>
+    api.get<{ submissions: SubmissionSummary[]; total: number }>('/submissions/player/all', { params: { limit, offset } }),
+
+  /** Coach: Inbox (PENDING + DRAFT_REVIEW) */
+  coachInbox: (status?: string, limit = 50, offset = 0) =>
+    api.get<{ submissions: SubmissionSummary[]; total: number }>('/submissions/coach/me', { params: { status, limit, offset } }),
+
+  /** Coach: Run AI analysis on a submission */
+  analyze: (submissionId: string) =>
+    api.post<SubmissionDetail>(`/submissions/${submissionId}/analyze`, null, { timeout: 1800000 }), // 30 min for large videos
+
+  /** Coach: Publish with edited text */
+  publish: (submissionId: string, editedText: string) =>
+    api.put<SubmissionDetail>(`/submissions/${submissionId}/publish`, { edited_text: editedText }),
+
+  /** Get single submission detail */
+  getById: (submissionId: string) =>
+    api.get<SubmissionDetail>(`/submissions/${submissionId}`),
 };
 
 export default api;

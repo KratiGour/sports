@@ -14,6 +14,7 @@ from database.models import (
     User, UserSession, ProcessingJob,
     Video, HighlightEvent, HighlightJob, MatchRequest, UserVote,
     BattingAnalysis,
+    VideoSubmission,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -28,6 +29,9 @@ STORAGE_DIRS = [
     "storage/reports",
     "storage/bowling_videos",
     "storage/batting_videos",
+    "storage/submissions",
+    "storage/submission_videos",
+    "storage/temp_frames",
 ]
 for dir_path in STORAGE_DIRS:
     Path(dir_path).mkdir(parents=True, exist_ok=True)
@@ -108,6 +112,9 @@ app.mount("/static/highlights", StaticFiles(directory="storage/highlight"), name
 app.mount("/static/reports", StaticFiles(directory="storage/reports"), name="reports")
 app.mount("/static/bowling_videos", StaticFiles(directory="storage/bowling_videos"), name="bowling_videos")
 app.mount("/static/batting_videos", StaticFiles(directory="storage/batting_videos"), name="batting_videos")
+app.mount("/static/submissions", StaticFiles(directory="storage/submissions"), name="submissions")
+app.mount("/static/submission_videos", StaticFiles(directory="storage/submission_videos"), name="submission_videos")
+app.mount("/static/temp_frames", StaticFiles(directory="storage/temp_frames"), name="temp_frames")
 
 
 # Health Check Endpoints 
@@ -142,7 +149,7 @@ def db_health_check():
 
 
 # Include API Routers 
-from api.routes import auth, videos, jobs, requests, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE
+from api.routes import auth, videos, jobs, requests, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE, submissions, SUBMISSIONS_AVAILABLE
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
@@ -163,12 +170,19 @@ if BOWLING_AVAILABLE and bowling is not None:
 else:
     logger.warning("Bowling analysis feature disabled (MediaPipe not available)")
 
-# Batting Analysis routes)
+# Batting Analysis routes
 if BATTING_AVAILABLE and batting is not None:
     app.include_router(batting.router, prefix="/api/v1/batting", tags=["batting"])
     logger.info("Batting analysis feature enabled")
 else:
     logger.warning("Batting analysis feature disabled (MediaPipe not available)")
+
+# Submissions routes
+if SUBMISSIONS_AVAILABLE and submissions is not None:
+    app.include_router(submissions.router, prefix="/api/v1/submissions", tags=["submissions"])
+    logger.info("B2B2C Submissions pipeline enabled")
+else:
+    logger.warning("Submissions pipeline disabled")
 
 
 # Entry Point 

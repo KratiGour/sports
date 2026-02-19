@@ -27,8 +27,17 @@ except ImportError as e:
     batting = None
     BATTING_AVAILABLE = False
 
+try:
+    from . import submissions
+    SUBMISSIONS_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Submissions feature disabled due to import error: {e}")
+    submissions = None
+    SUBMISSIONS_AVAILABLE = False
+
 __all__ = [
     "auth", "videos", "jobs", "requests",
     "bowling", "BOWLING_AVAILABLE",
     "batting", "BATTING_AVAILABLE",
+    "submissions", "SUBMISSIONS_AVAILABLE",
 ]

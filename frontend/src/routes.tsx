@@ -21,6 +21,9 @@ import ProfilePage from './pages/ProfilePage';
 import PlayerPerformance from './pages/PlayerPerformance';
 import BowlingAnalysisPage from './pages/BowlingAnalysisPage';
 import BattingAnalysisPage from './pages/BattingAnalysisPage';
+import PlayerSubmissionsPage from './pages/PlayerSubmissionsPage';
+import CoachInboxPage from './pages/CoachInboxPage';
+import CoachReviewPage from './pages/CoachReviewPage';
 
 // Auth Initializer (runs once on module load) 
 let authInitialized = false;
@@ -153,6 +156,7 @@ export default function AppRouter() {
             <Route path="/player/:id" element={<PlayerPerformance />} />
             <Route path="/player/bowling" element={<BowlingAnalysisPage />} />
             <Route path="/player/batting" element={<BattingAnalysisPage />} />
+            <Route path="/player/submissions" element={<PlayerSubmissionsPage />} />
           </Route>
         </Route>
 
@@ -163,6 +167,8 @@ export default function AppRouter() {
               <Route path="/coach" element={<CoachDashboard />} />
               <Route path="/coach/upload" element={<UploadPage />} />
               <Route path="/coach/player/:id" element={<PlayerPerformance />} />
+              <Route path="/coach/submissions" element={<CoachInboxPage />} />
+              <Route path="/coach/submissions/:submissionId/review" element={<CoachReviewPage />} />
             </Route>
           </Route>
         </Route>
