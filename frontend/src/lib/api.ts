@@ -1,45 +1,98 @@
-import axios from 'axios';
-import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
+import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
-/* ================== AXIOS INSTANCE ================== */
-
+// Base URL from environment or default
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// Create axios instance
 export const api = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
-  timeout: 30000,
-  headers: { 'Content-Type': 'application/json' },
+  timeout: 300000, // 5 min default, overridden per-endpoint for long operations
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-/* ================== INTERCEPTORS ================== */
-
+// Request interceptor - attach JWT token
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('access_token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    
+    // Public routes that don't need authentication
+    const publicRoutes = ['/auth/login', '/auth/register', '/health'];
+    const isPublicRoute = publicRoutes.some(route => config.url?.includes(route));
+    
+    // Only attach token if available AND not a public route
+    if (token && config.headers && !isPublicRoute) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    // Only warn about missing token for protected routes
+    if (!token && !isPublicRoute) {
+      console.warn(`⚠️ [API] No token found for ${config.method?.toUpperCase()} ${config.url}`);
+    }
+    
+    // Log requests in development
+    if (import.meta.env.DEV) {
+      console.log(`🚀 [API] ${config.method?.toUpperCase()} ${config.url} ${token && !isPublicRoute ? '(with token)' : isPublicRoute ? '(public)' : '(NO TOKEN)'}`);
+    }
+    
     return config;
   },
-  (error) => Promise.reject(error)
-);
-
-api.interceptors.response.use(
-  (res) => res,
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      localStorage.clear();
-      window.location.href = '/login';
-    }
+  (error) => {
     return Promise.reject(error);
   }
 );
 
-/* ================== AUTH API ================== */
+// Response interceptor - handle 401 errors
+api.interceptors.response.use(
+  (response) => {
+    // Log responses in development
+    if (import.meta.env.DEV) {
+      console.log(`✅ [API] ${response.status} ${response.config.url}`);
+    }
+    return response;
+  },
+  async (error: AxiosError) => {
+    const originalRequest = error.config;
+    
+    // Log errors in development
+    if (import.meta.env.DEV) {
+      const url = originalRequest?.url || 'unknown';
+      const status = error.response?.status || 'no response';
+      console.error(`❌ [API] ${status} ${url}`);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        code: error.code,
+      });
+    }
+    
+    // Handle 401 Unauthorized
+    if (error.response?.status === 401) {
+      // Clear auth data
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user_profile');
+      
+      // Redirect to login (only if not already on login page)
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login?session_expired=true';
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
 
+// ============ API Endpoints ============
+
+// Auth endpoints
 export const authApi = {
-  login: (email: string, password: string) =>
+  login: (email: string, password: string) => 
     api.post('/auth/login', { email, password }),
-
+  
   register: (data: {
     name: string;
     email: string;
@@ -48,154 +101,310 @@ export const authApi = {
     phone?: string;
     team?: string;
   }) => api.post('/auth/register', data),
-
+  
   logout: () => api.post('/auth/logout'),
-
+  
   getProfile: () => api.get('/auth/me'),
-
+  
   updateProfile: (data: Partial<{
     name: string;
     phone: string;
     team: string;
     profile_bio: string;
-    jersey_number?: number;
   }>) => api.put('/auth/me', data),
 };
 
-/* ================== VIDEOS API ================== */
-
+// Video endpoints
 export const videosApi = {
-  listAll: (params?: {
-    page?: number;
-    per_page?: number;
+  // Admin only: list ALL videos
+  listAll: (params?: { 
+    page?: number; 
+    per_page?: number; 
     visibility?: 'PUBLIC' | 'PRIVATE';
   }) => api.get('/videos/all', { params }),
-
-  listPublic: (params?: {
-    page?: number;
-    per_page?: number;
+  
+  // Public library with search
+  listPublic: (params?: { 
+    page?: number; 
+    per_page?: number; 
     search?: string;
     event_type?: 'FOUR' | 'SIX' | 'WICKET';
   }) => api.get('/videos/public', { params }),
-
-  listPrivate: (page = 1, perPage = 20) =>
+  
+  // Private dashboard (Premium)
+  listPrivate: (page = 1, perPage = 20) => 
     api.get('/videos/private', { params: { page, per_page: perPage } }),
-
-  getById: (videoId: string) =>
+  
+  // Get video details by ID
+  getById: (videoId: string) => 
     api.get(`/videos/${videoId}`),
-
-  getEvents: (videoId: string, eventType?: 'FOUR' | 'SIX' | 'WICKET') =>
-    api.get(`/videos/${videoId}/events`, {
-      params: { event_type: eventType },
-    }),
-
-  upload: (formData: FormData, onProgress?: (p: number) => void) =>
+  
+  // Get video events with optional filter
+  getEvents: (videoId: string, eventType?: 'FOUR' | 'SIX' | 'WICKET') => 
+    api.get(`/videos/${videoId}/events`, { params: { event_type: eventType } }),
+  
+  // Upload video (multipart form data)
+  upload: (formData: FormData, onProgress?: (progress: number) => void) => 
     api.post('/videos/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (e) => {
-        if (e.total && onProgress) {
-          onProgress(Math.round((e.loaded * 100) / e.total));
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(progress);
         }
       },
     }),
-
-  uploadYouTube: (
-    data: {
-      url: string;
-      title?: string;
-      description?: string;
-      teams?: string;
-      venue?: string;
-      match_date?: string;
-      visibility?: 'public' | 'private';
-    },
-    onProgress?: (p: number) => void
-  ) => {
-    const fd = new FormData();
-    Object.entries(data).forEach(([k, v]) => v && fd.append(k, v));
-
-    return api.post('/videos/upload/youtube', fd, {
+  
+  // Upload video from YouTube URL
+  uploadYouTube: (data: {
+    url: string;
+    title?: string;
+    description?: string;
+    teams?: string;
+    venue?: string;
+    match_date?: string;
+    visibility?: 'public' | 'private';
+  }, onProgress?: (progress: number) => void) => {
+    const formData = new FormData();
+    formData.append('url', data.url);
+    if (data.title) formData.append('title', data.title);
+    if (data.description) formData.append('description', data.description);
+    if (data.teams) formData.append('teams', data.teams);
+    if (data.venue) formData.append('venue', data.venue);
+    if (data.match_date) formData.append('match_date', data.match_date);
+    formData.append('visibility', data.visibility || 'private');
+    
+    return api.post('/videos/upload/youtube', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 900000,
-      onUploadProgress: (e) => {
-        if (e.total && onProgress) {
-          onProgress(Math.round((e.loaded * 100) / e.total));
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(progress);
         }
       },
+      timeout: 900000, // 15 minutes for YouTube download
     });
   },
-
-  publish: (videoId: string) =>
+  
+  // Publish private video to public
+  publish: (videoId: string) => 
     api.post(`/videos/${videoId}/publish`),
-
-  delete: (videoId: string) =>
+  
+  // Delete video
+  delete: (videoId: string) => 
     api.delete(`/videos/${videoId}`),
-
-  getStreamUrl: (videoId: string) =>
+  
+  // Get video stream URL (for original video)
+  getStreamUrl: (videoId: string) => 
     `${API_BASE_URL}/api/v1/videos/${videoId}/stream`,
-
-  getSupercutUrl: (videoId: string) =>
+  
+  // Get supercut stream URL (for highlight reel)
+  getSupercutUrl: (videoId: string) => 
     `${API_BASE_URL}/api/v1/videos/${videoId}/supercut`,
 };
 
-/* ================== JOBS API ================== */
-
+// Jobs endpoints (OCR processing)
 export const jobsApi = {
-  trigger: (videoId: string) =>
-    api.post('/jobs/trigger', { video_id: videoId }),
-
-  getStatus: (videoId: string) =>
+  // Trigger OCR processing
+  trigger: (videoId: string, config?: Record<string, unknown>) => 
+    api.post('/jobs/trigger', { video_id: videoId, config }),
+  
+  // Get job status (lightweight polling - no auth required)
+  getStatus: (videoId: string) => 
     api.get(`/jobs/${videoId}/status/poll`),
-
-  getFullStatus: (videoId: string) =>
+  
+  // Get full job status (requires auth)
+  getFullStatus: (videoId: string) => 
     api.get(`/jobs/${videoId}/status`),
-
-  getResult: (videoId: string) =>
+  
+  // Get job results
+  getResult: (videoId: string) => 
     api.get(`/jobs/${videoId}/result`),
-
-  retry: (videoId: string) =>
+  
+  // Retry failed job
+  retry: (videoId: string) => 
     api.post(`/jobs/${videoId}/retry`),
+  
+  // Admin: list pending jobs
+  listPending: () => 
+    api.get('/jobs/pending'),
 };
 
-/* ================== REQUESTS API ================== */
-
+// Match requests endpoints (voting system)
 export const requestsApi = {
+  // Create new request
   create: (data: {
     youtube_url: string;
     match_title?: string;
     match_description?: string;
   }) => api.post('/requests/', data),
-
-  list: (page = 1, perPage = 20, status?: string) =>
-    api.get('/requests/', {
-      params: { page, per_page: perPage, status_filter: status },
-    }),
-
-  vote: (requestId: string, voteType: 'up' | 'down') =>
+  
+  // List all requests
+  list: (page = 1, perPage = 20, status?: string) => 
+    api.get('/requests/', { params: { page, per_page: perPage, status_filter: status } }),
+  
+  // Vote up/down for request
+  vote: (requestId: string, voteType: 'up' | 'down') => 
     api.post(`/requests/${requestId}/vote`, { vote_type: voteType }),
-
-  removeVote: (requestId: string) =>
+  
+  // Remove vote
+  removeVote: (requestId: string) => 
     api.delete(`/requests/${requestId}/vote`),
-
-  adminDashboard: (page = 1, perPage = 50) =>
-    api.get('/requests/admin/dashboard', {
-      params: { page, per_page: perPage },
+  
+  // Admin: get dashboard
+  adminDashboard: (page = 1, perPage = 50) => 
+    api.get('/requests/admin/dashboard', { params: { page, per_page: perPage } }),
+  
+  // Admin: approve request
+  approve: (requestId: string) => 
+    api.patch(`/requests/${requestId}/status`, null, { 
+      params: { new_status: 'approved' } 
     }),
-
-  approve: (requestId: string) =>
-    api.patch(`/requests/${requestId}/status`, null, {
-      params: { new_status: 'approved' },
+  
+  // Admin: reject request
+  reject: (requestId: string) => 
+    api.patch(`/requests/${requestId}/status`, null, { 
+      params: { new_status: 'rejected' } 
     }),
-
-  reject: (requestId: string) =>
-    api.patch(`/requests/${requestId}/status`, null, {
-      params: { new_status: 'rejected' },
+  
+  // Admin: update status (general)
+  updateStatus: (requestId: string, status: string, videoId?: string) => 
+    api.patch(`/requests/${requestId}/status`, null, { 
+      params: { new_status: status, fulfilled_video_id: videoId } 
     }),
+};
 
-  updateStatus: (requestId: string, status: string, videoId?: string) =>
-    api.patch(`/requests/${requestId}/status`, null, {
-      params: { new_status: status, fulfilled_video_id: videoId },
-    }),
+// Bowling Analysis endpoints
+export const bowlingApi = {
+  /** Upload video and run biomechanics analysis */
+  analyze: (file: File, onProgress?: (progress: number) => void) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/bowling/analyze', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 1800000, // 30 min — large videos (900MB+) need time for frame-by-frame MediaPipe processing
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
+        }
+      },
+    });
+  },
+
+  /** List current user's past analyses */
+  history: (limit = 20, offset = 0) =>
+    api.get('/bowling/history', { params: { limit, offset } }),
+
+  /** Fetch single analysis by ID */
+  getById: (analysisId: string) =>
+    api.get(`/bowling/${analysisId}`),
+};
+
+// Batting Analysis endpoints
+export const battingApi = {
+  /** Upload video and run batting biomechanics analysis */
+  analyze: (file: File, onProgress?: (progress: number) => void) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/batting/analyze', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 1800000, // 30 min — large videos (900MB+) need time for frame-by-frame MediaPipe processing
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
+        }
+      },
+    });
+  },
+
+  /** List current user's past batting analyses */
+  history: (limit = 20, offset = 0) =>
+    api.get('/batting/history', { params: { limit, offset } }),
+
+  /** Fetch single batting analysis by ID */
+  getById: (analysisId: string) =>
+    api.get(`/batting/${analysisId}`),
+};
+
+// Submissions Pipeline
+export interface SubmissionSummary {
+  id: string;
+  player_id: string;
+  coach_id: string;
+  player_name?: string;
+  coach_name?: string;
+  original_filename: string;
+  analysis_type: string;
+  status: 'PENDING' | 'PROCESSING' | 'DRAFT_REVIEW' | 'PUBLISHED';
+  created_at: string;
+  analyzed_at?: string;
+  published_at?: string;
+  pdf_report_url?: string;
+}
+
+export interface SubmissionDetail extends SubmissionSummary {
+  video_url: string;
+  raw_biometrics?: {
+    records: Record<string, number>[];
+    summary: Record<string, Record<string, number>>;
+  };
+  phase_info?: Record<string, number | null>;
+  annotated_video_url?: string;
+  key_frame_url?: string;
+  ai_draft_text?: string;
+  coach_final_text?: string;
+}
+
+export interface CoachListItem {
+  id: string;
+  name: string;
+  email: string;
+  team?: string;
+}
+
+export const submissionsApi = {
+  /** List available coaches for the player's dropdown */
+  listCoaches: () =>
+    api.get<{ coaches: CoachListItem[] }>('/submissions/coaches'),
+
+  /** Player: Upload video to a coach */
+  upload: (file: File, coachId: string, analysisType: string = 'BATTING', onProgress?: (p: number) => void) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('coach_id', coachId);
+    formData.append('analysis_type', analysisType);
+    return api.post<SubmissionDetail>('/submissions/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+      onUploadProgress: (e) => {
+        if (e.total && onProgress) onProgress(Math.round((e.loaded * 100) / e.total));
+      },
+    });
+  },
+
+  /** Player: My published reports */
+  playerReports: (limit = 50, offset = 0) =>
+    api.get<{ submissions: SubmissionSummary[]; total: number }>('/submissions/player/me', { params: { limit, offset } }),
+
+  /** Player: All my submissions (all statuses) */
+  playerAll: (limit = 50, offset = 0) =>
+    api.get<{ submissions: SubmissionSummary[]; total: number }>('/submissions/player/all', { params: { limit, offset } }),
+
+  /** Coach: Inbox (PENDING + DRAFT_REVIEW) */
+  coachInbox: (status?: string, limit = 50, offset = 0) =>
+    api.get<{ submissions: SubmissionSummary[]; total: number }>('/submissions/coach/me', { params: { status, limit, offset } }),
+
+  /** Coach: Run AI analysis on a submission */
+  analyze: (submissionId: string) =>
+    api.post<SubmissionDetail>(`/submissions/${submissionId}/analyze`, null, { timeout: 1800000 }), // 30 min for large videos
+
+  /** Coach: Publish with edited text */
+  publish: (submissionId: string, editedText: string) =>
+    api.put<SubmissionDetail>(`/submissions/${submissionId}/publish`, { edited_text: editedText }),
+
+  /** Get single submission detail */
+  getById: (submissionId: string) =>
+    api.get<SubmissionDetail>(`/submissions/${submissionId}`),
 };
 
 export default api;

@@ -18,11 +18,14 @@ import HighlightsPage from './pages/HighlightsPage';
 import VideoDetailPage from './pages/VideoDetailPage';
 import RequestsPage from './pages/RequestsPage';
 import ProfilePage from './pages/ProfilePage';
-import PlayerStatsPage from './pages/PlayerStatsPage';
-import MatchesPage from './pages/MatchesPage';
-import NotificationsPage from './pages/NotificationsPage';
+import PlayerPerformance from './pages/PlayerPerformance';
+import BowlingAnalysisPage from './pages/BowlingAnalysisPage';
+import BattingAnalysisPage from './pages/BattingAnalysisPage';
+import PlayerSubmissionsPage from './pages/PlayerSubmissionsPage';
+import CoachInboxPage from './pages/CoachInboxPage';
+import CoachReviewPage from './pages/CoachReviewPage';
 
-// ================= AUTH INITIALIZER =================
+// Auth Initializer (runs once on module load) 
 let authInitialized = false;
 
 function initializeAuthOnce() {
@@ -49,24 +52,24 @@ function initializeAuthOnce() {
   }
 }
 
-// Initialize immediately
+// Initialize immediately on module load
 initializeAuthOnce();
 
-// ================= PROTECTED ROUTE =================
+// Protected Route - Requires authentication
 function ProtectedRoute() {
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-
+  
   const shouldRedirect = useMemo(() => !isAuthenticated, [isAuthenticated]);
-
+  
   if (shouldRedirect) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
-
+  
   return <Outlet />;
 }
 
-// ================= ROLE GUARD =================
+// Role Guard - Restricts access based on user role
 interface RoleGuardProps {
   allowedRoles: UserRole[];
   fallbackPath?: string;
@@ -87,7 +90,7 @@ function RoleGuard({ allowedRoles, fallbackPath = '/player' }: RoleGuardProps) {
   return <Outlet />;
 }
 
-// ================= GUEST ROUTE =================
+// Guest Route - Only accessible when NOT authenticated
 function GuestRoute() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
@@ -106,7 +109,7 @@ function GuestRoute() {
   return <Outlet />;
 }
 
-// ================= DASHBOARD REDIRECT =================
+// Dashboard Redirect - Routes to role-specific dashboard
 function DashboardRedirect() {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -125,7 +128,7 @@ function DashboardRedirect() {
   return <Navigate to={targetPath} replace />;
 }
 
-// ================= APP ROUTER =================
+// App Router
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -150,9 +153,10 @@ export default function AppRouter() {
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/settings" element={<ProfilePage />} />
             <Route path="/player" element={<PlayerDashboard />} />
-            <Route path="/stats" element={<PlayerStatsPage />} />
-            <Route path="/matches" element={<MatchesPage />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/player/:id" element={<PlayerPerformance />} />
+            <Route path="/player/bowling" element={<BowlingAnalysisPage />} />
+            <Route path="/player/batting" element={<BattingAnalysisPage />} />
+            <Route path="/player/submissions" element={<PlayerSubmissionsPage />} />
           </Route>
         </Route>
 
@@ -162,6 +166,9 @@ export default function AppRouter() {
             <Route element={<DashboardLayout />}>
               <Route path="/coach" element={<CoachDashboard />} />
               <Route path="/coach/upload" element={<UploadPage />} />
+              <Route path="/coach/player/:id" element={<PlayerPerformance />} />
+              <Route path="/coach/submissions" element={<CoachInboxPage />} />
+              <Route path="/coach/submissions/:submissionId/review" element={<CoachReviewPage />} />
             </Route>
           </Route>
         </Route>

@@ -51,13 +51,8 @@ export default function RegisterPage() {
         email: formData.email,
         password: formData.password,
         role: formData.role,
-        //phone: formData.phone || null,
-        jersey_number: formData.jerseyNumber || null,
-        team: formData.team || null,
-        phone: formData.phone || null,
-        jersey_number: formData.jerseyNumber || null,
-        team: formData.team || null,
-        profile_bio: formData.profileBio || null,
+        phone: formData.phone || undefined,
+        team: formData.team || undefined,
       });
 
       console.log('Registration successful:', response.data);
