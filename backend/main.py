@@ -137,7 +137,7 @@ def db_health_check():
 
 # ============ Include API Routers ============
 
-from api.routes import auth, videos, jobs, requests
+from api.routes import auth, videos, jobs, requests, player_stats
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
@@ -150,7 +150,8 @@ app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
 
 # Match request/voting routes
 app.include_router(requests.router, prefix="/api/v1", tags=["requests"])
-
+# Player statistics routes (read-only API)
+app.include_router(player_stats.router, prefix="/api/v1", tags=["player-stats"])
 
 # ============ Entry Point ============
 
