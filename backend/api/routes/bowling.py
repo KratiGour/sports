@@ -48,7 +48,7 @@ REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Singleton engines (heavy init — reuse across requests)
-analyzer = CricketPoseAnalyzer()
+analyzer = CricketPoseAnalyzer() if MEDIAPIPE_AVAILABLE else None
 gemini = GeminiManager()
 
 

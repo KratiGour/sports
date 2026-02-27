@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
 from sqlalchemy import text
-from backend.database.crud import bowling
+from database.crud import bowling
 from database.config import SessionLocal, engine, Base
 
 # Import all models to ensure they're registered with SQLAlchemy
