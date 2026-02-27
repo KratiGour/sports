@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
 from sqlalchemy import text
+from backend.database.crud import bowling
 from database.config import SessionLocal, engine, Base
 
 # Import all models to ensure they're registered with SQLAlchemy
@@ -148,14 +149,8 @@ def db_health_check():
         return {"status": "error", "database": "disconnected", "detail": str(e)}
 
 
-<<<<<<< HEAD
-# ============ Include API Routers ============
-
-from api.routes import auth, videos, jobs, requests, player_stats
-=======
 # Include API Routers 
-from api.routes import auth, videos, jobs, requests, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE, submissions, SUBMISSIONS_AVAILABLE
->>>>>>> 907a4278acb9f1934c92e5e39f0b7f7678e19694
+from api.routes import auth, videos, jobs, requests, player_stats, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE, submissions, SUBMISSIONS_AVAILABLE 
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
@@ -168,10 +163,9 @@ app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
 
 # Match request/voting routes
 app.include_router(requests.router, prefix="/api/v1", tags=["requests"])
-<<<<<<< HEAD
+
 # Player statistics routes (read-only API)
 app.include_router(player_stats.router, prefix="/api/v1", tags=["player-stats"])
-=======
 
 # Bowling Analysis routes
 if BOWLING_AVAILABLE and bowling is not None:
@@ -179,7 +173,6 @@ if BOWLING_AVAILABLE and bowling is not None:
     logger.info("Bowling analysis feature enabled")
 else:
     logger.warning("Bowling analysis feature disabled (MediaPipe not available)")
->>>>>>> 907a4278acb9f1934c92e5e39f0b7f7678e19694
 
 # Batting Analysis routes
 if BATTING_AVAILABLE and batting is not None:
