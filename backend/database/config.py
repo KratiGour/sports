@@ -41,8 +41,8 @@ else:
         DATABASE_URL,
         poolclass=QueuePool,
         pool_pre_ping=True,       # Test connections before use
-        pool_recycle=300,         # Recycle connections every 5 minutes
-        pool_size=5,              # Reduced for Render free tier
+        pool_recycle=1800,        # Recycle connections every 30 minutes
+        pool_size=5,              # Keep pool small for serverless
         max_overflow=10,          # Allow overflow connections
         pool_timeout=30,          # Wait 30s for a connection
         connect_args={
@@ -59,7 +59,7 @@ else:
         DATABASE_URL,
         poolclass=QueuePool,
         pool_pre_ping=True,
-        pool_recycle=300,
+        pool_recycle=1800,
         pool_size=2,              # Minimal for background tasks
         max_overflow=3,
         pool_timeout=60,

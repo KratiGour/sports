@@ -35,9 +35,27 @@ except Exception as e:
     submissions = None
     SUBMISSIONS_AVAILABLE = False
 
+try:
+    from . import storage
+    from .storage import GCS_AVAILABLE
+except Exception as e:
+    print(f"Warning: Cloud storage (signed URL) feature disabled: {e}")
+    storage = None
+    GCS_AVAILABLE = False
+
+try:
+    from . import worker
+    WORKER_AVAILABLE = True
+except Exception as e:
+    print(f"Warning: Worker endpoint disabled: {e}")
+    worker = None
+    WORKER_AVAILABLE = False
+
 __all__ = [
     "auth", "videos", "jobs", "requests",
     "bowling", "BOWLING_AVAILABLE",
     "batting", "BATTING_AVAILABLE",
     "submissions", "SUBMISSIONS_AVAILABLE",
+    "storage", "GCS_AVAILABLE",
+    "worker", "WORKER_AVAILABLE",
 ]
