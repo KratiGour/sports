@@ -3,9 +3,17 @@
 #   Cloud Run SA    → artifactregistry.reader on repo
 #   Cloud Run SA    → secretmanager.secretAccessor on each secret
 
-# Shorter alias used in all image tags
 substitutions:
+  _REGION: asia-south1
+  _PROJECT: sports-ai-489110
+  _AR_REPO: sports-backend
+  _SERVICE: sports-backend
   _IMAGE: asia-south1-docker.pkg.dev/sports-ai-489110/sports-backend/api
+  _GCS_BUCKET: sports-ai-storage
+  _FRONTEND_URL: https://sports-teal-two.vercel.app
+  _WORKER_URL: https://sports-backend-kh55fwhmvq-el.a.run.app
+  _WORKER_SA_EMAIL: 261249483566-compute@developer.gserviceaccount.com
+  _TASK_QUEUE: video-processing
 
 steps:
   # Step 0: Authenticate Docker with Artifact Registry
@@ -14,7 +22,7 @@ steps:
     args:
       - auth
       - configure-docker
-      - asia-south1-docker.pkg.dev
+      - $_REGION-docker.pkg.dev
 
   # Step 1: Build the Docker image with two tags: one for this commit, one for "latest"
   - name: "gcr.io/cloud-builders/docker"
@@ -48,9 +56,9 @@ steps:
     args:
       - run
       - deploy
-      - sports-backend
+      - $_SERVICE
       - --image=$_IMAGE:$COMMIT_SHA
-      - --region=asia-south1
+      - --region=$_REGION
       - --platform=managed
       - --allow-unauthenticated
       # Resources
@@ -64,8 +72,8 @@ steps:
       - --min-instances=0
       - --max-instances=3
       - --execution-environment=gen2
-      # Non-sensitive environment variables (hardcoded is fine)
-      - --set-env-vars=CLOUD_RUN=1,GCS_BUCKET_NAME=sports-ai-storage,FRONTEND_URL=https://sports-teal-two.vercel.app,ALLOWED_ORIGINS=https://sports-teal-two.vercel.app,GEMINI_MODEL=gemini-2.5-flash
+      # Non-sensitive env vars — values come from trigger substitutions, not hardcoded here
+      - --set-env-vars=CLOUD_RUN=1,GCS_BUCKET_NAME=$_GCS_BUCKET,FRONTEND_URL=$_FRONTEND_URL,ALLOWED_ORIGINS=$_FRONTEND_URL,GEMINI_MODEL=gemini-2.5-flash,GCP_PROJECT=$_PROJECT,GCP_LOCATION=$_REGION,GCP_TASK_QUEUE=$_TASK_QUEUE,WORKER_SERVICE_URL=$_WORKER_URL,WORKER_SERVICE_ACCOUNT_EMAIL=$_WORKER_SA_EMAIL
       # Sensitive vars pulled from Secret Manager
       # Create secrets once: gcloud secrets create DATABASE_URL --data-file=- <<< "your-value"
       - --update-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET_KEY=JWT_SECRET_KEY:latest,GEMINI_API_KEY_1=GEMINI_API_KEY_1:latest
@@ -73,8 +81,8 @@ steps:
 
 # Store the image in the build artifact list
 images:
-  - asia-south1-docker.pkg.dev/sports-ai-489110/sports-backend/api:$COMMIT_SHA
-  - asia-south1-docker.pkg.dev/sports-ai-489110/sports-backend/api:latest
+  - $_IMAGE:$COMMIT_SHA
+  - $_IMAGE:latest
 
 options:
   logging: CLOUD_LOGGING_ONLY

@@ -6,6 +6,7 @@ Authenticated endpoints for Player role.
 import logging
 import shutil
 import os
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -41,9 +42,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Directories
-REPORTS_DIR = Path("storage/reports")
-VIDEOS_DIR = Path("storage/bowling_videos")
+# Directories — use /tmp/ on Cloud Run (ephemeral), local storage/ for dev
+_USE_TMP = os.getenv("CLOUD_RUN", "").lower() in ("1", "true", "yes")
+REPORTS_DIR = Path(tempfile.gettempdir()) if _USE_TMP else Path("storage/reports")
+VIDEOS_DIR = Path(tempfile.gettempdir()) if _USE_TMP else Path("storage/bowling_videos")
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 

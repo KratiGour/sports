@@ -18,6 +18,7 @@ Shared:
 import logging
 import shutil
 import os
+import tempfile
 import uuid
 from pathlib import Path
 from datetime import datetime
@@ -74,11 +75,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-#  Storage dirs 
-SUBMISSIONS_DIR = Path("storage/submissions")
-REPORTS_DIR = Path("storage/reports")
-ANNOTATED_DIR = Path("storage/submission_videos")
-TEMP_FRAMES_DIR = Path("storage/temp_frames")
+#  Storage dirs — use /tmp/ on Cloud Run (ephemeral), local storage/ for dev
+_USE_TMP = os.getenv("CLOUD_RUN", "").lower() in ("1", "true", "yes")
+if _USE_TMP:
+    _tmp = Path(tempfile.gettempdir())
+    SUBMISSIONS_DIR = _tmp / "submissions"
+    REPORTS_DIR = _tmp / "reports"
+    ANNOTATED_DIR = _tmp / "submission_videos"
+    TEMP_FRAMES_DIR = _tmp / "temp_frames"
+else:
+    SUBMISSIONS_DIR = Path("storage/submissions")
+    REPORTS_DIR = Path("storage/reports")
+    ANNOTATED_DIR = Path("storage/submission_videos")
+    TEMP_FRAMES_DIR = Path("storage/temp_frames")
 
 for d in [SUBMISSIONS_DIR, REPORTS_DIR, ANNOTATED_DIR, TEMP_FRAMES_DIR]:
     d.mkdir(parents=True, exist_ok=True)
