@@ -407,4 +407,35 @@ export const submissionsApi = {
     api.get<SubmissionDetail>(`/submissions/${submissionId}`),
 };
 
+// Cloud Storage — Direct-to-GCS Upload
+export interface SignedUrlResponse {
+  signed_url: string;
+  blob_name: string;
+  submission_id: string;
+}
+
+export interface ConfirmUploadResponse {
+  submission_id: string;
+  status: string;
+  blob_name: string;
+}
+
+export const storageApi = {
+  /** Get a V4 Signed URL for direct PUT to GCS */
+  getUploadUrl: (filename: string, contentType: string, analysisType: string = 'BATTING') =>
+    api.get<SignedUrlResponse>('/storage/upload-url', {
+      params: { filename, content_type: contentType, analysis_type: analysisType },
+    }),
+
+  /** Confirm the upload after the direct GCS PUT succeeds */
+  confirmUpload: (submissionId: string) =>
+    api.post<ConfirmUploadResponse>('/storage/confirm-upload', null, {
+      params: { submission_id: submissionId },
+    }),
+
+  /** Trigger background ML processing via Cloud Tasks */
+  startProcessing: (submissionId: string) =>
+    api.post(`/submissions/${submissionId}/analyze`, null, { timeout: 30000 }),
+};
+
 export default api;
