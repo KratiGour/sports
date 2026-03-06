@@ -16,7 +16,6 @@ Shared:
 """
 
 import logging
-import shutil
 import os
 import tempfile
 import uuid
@@ -26,6 +25,7 @@ from datetime import datetime
 import cv2
 import numpy as np
 import pandas as pd
+import google.cloud.storage as gcs
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -91,6 +91,18 @@ else:
 
 for d in [SUBMISSIONS_DIR, REPORTS_DIR, ANNOTATED_DIR, TEMP_FRAMES_DIR]:
     d.mkdir(parents=True, exist_ok=True)
+
+# GCS client for B2B2C uploads (POST /upload → GCS instead of local disk)
+_GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME", "")
+_gcs_client = None
+_gcs_bucket_upload = None
+try:
+    if _GCS_BUCKET_NAME:
+        _gcs_client = gcs.Client()
+        _gcs_bucket_upload = _gcs_client.bucket(_GCS_BUCKET_NAME)
+        logger.info("Submissions GCS client ready — bucket '%s'", _GCS_BUCKET_NAME)
+except Exception as _gcs_init_err:
+    logger.warning("Submissions GCS client init failed: %s", _gcs_init_err)
 
 #  Singleton engines (heavy init — reuse) 
 _bowling_analyzer = CricketPoseAnalyzer() if BOWLING_ENGINE_AVAILABLE and MEDIAPIPE_AVAILABLE else None
@@ -207,18 +219,33 @@ async def player_upload(
     if not coach:
         raise HTTPException(status_code=404, detail="Coach not found.")
 
-    # Save file
-    file_id = str(uuid.uuid4())
-    safe_filename = f"{file_id}_{file.filename}"
-    save_path = SUBMISSIONS_DIR / safe_filename
+    # Upload to GCS (Cloud Run) or local disk (dev)
+    file_id = str(uuid.uuid4())[:12]
+    safe_name = "".join(
+        c if c.isalnum() or c in "._-" else "_"
+        for c in (file.filename or "upload.mp4")
+    )
 
-    try:
-        with open(save_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save video: {e}")
-
-    video_url = f"/static/submissions/{safe_filename}"
+    if _gcs_bucket_upload is not None:
+        blob_name = f"raw_videos/{file_id}_{safe_name}"
+        try:
+            content = await file.read()
+            blob = _gcs_bucket_upload.blob(blob_name)
+            blob.upload_from_string(content, content_type=file.content_type or "video/mp4")
+            video_url = blob_name  # GCS object path — used by the worker
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to upload to GCS: {e}")
+    else:
+        # Local dev fallback — save to disk
+        safe_filename = f"{file_id}_{safe_name}"
+        save_path = SUBMISSIONS_DIR / safe_filename
+        try:
+            content = await file.read()
+            with open(save_path, "wb") as buffer:
+                buffer.write(content)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save video: {e}")
+        video_url = f"/static/submissions/{safe_filename}"
 
     sub = create_submission(
         db,
