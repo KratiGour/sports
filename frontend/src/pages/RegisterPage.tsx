@@ -37,9 +37,21 @@ export default function RegisterPage() {
       return;
     }
 
-    // Validate password strength
+    // Validate password strength 
     if (formData.password.length < 8) {
       setError('Password must be at least 8 characters');
+      return;
+    }
+    if (!/[A-Z]/.test(formData.password)) {
+      setError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(formData.password)) {
+      setError('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/[0-9]/.test(formData.password)) {
+      setError('Password must contain at least one digit');
       return;
     }
 
@@ -60,7 +72,14 @@ export default function RegisterPage() {
       // Redirect to login
       navigate('/login', { state: { message: 'Registration successful! Please log in.' } });
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      const axiosErr = err as { response?: { data?: { detail?: unknown } } };
+      const detail = axiosErr?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        // Pydantic returns an array of validation errors
+        setError(detail.map((d: { msg?: string }) => d.msg ?? String(d)).join(', '));
+      } else if (typeof detail === 'string') {
+        setError(detail);
+      } else if (err instanceof Error) {
         setError(err.message);
       } else {
         setError('An error occurred during registration');

@@ -6,7 +6,6 @@
 substitutions:
   _REGION: asia-south1
   _PROJECT: sports-ai-489110
-  _AR_REPO: sports-backend
   _SERVICE: sports-backend
   _IMAGE: asia-south1-docker.pkg.dev/sports-ai-489110/sports-backend/api
   _GCS_BUCKET: sports-ai-storage
