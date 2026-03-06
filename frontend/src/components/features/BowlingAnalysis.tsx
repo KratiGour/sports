@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect } from "react";
-import { bowlingApi } from "../../lib/api";
+import { bowlingApi, cloudUploadAndProcess, pollSubmissionResult, type SubmissionDetail } from "../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Progress } from "../ui/Progress";
@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Target,
   Youtube,
+  Loader2,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -68,6 +69,34 @@ interface AnalysisSummary {
 
 type Phase = "idle" | "uploading" | "processing" | "done" | "error";
 
+/** Map a SubmissionDetail (async Cloud Tasks result) to the AnalysisResult shape the UI expects. */
+function mapSubmissionToResult(sub: SubmissionDetail): AnalysisResult {
+  const summary = (sub.raw_biometrics?.summary ?? {}) as Record<string, Record<string, number>>;
+
+  // display_df column names after METRIC_LABELS rename
+  const elbowKey = Object.keys(summary).find((k) => k.toLowerCase().includes("elbow")) ?? "";
+  const releaseKey = Object.keys(summary).find((k) => k.toLowerCase().includes("release") || k.toLowerCase().includes("wrist")) ?? "";
+
+  return {
+    id: sub.id,
+    player_id: sub.player_id,
+    original_filename: sub.original_filename ?? null,
+    biometrics: {
+      avg_elbow_angle: summary[elbowKey]?.mean ?? 0,
+      release_consistency: summary[releaseKey]?.std ?? 0,
+    },
+    feedback: {
+      summary: "Analysis complete. See full report.",
+      full_text: sub.ai_draft_text ?? sub.coach_final_text ?? "",
+    },
+    annotated_video_url: sub.annotated_video_url ?? null,
+    report_url: sub.pdf_report_url ?? null,
+    created_at: sub.created_at,
+    detected_flaws: [],
+    drill_recommendations: [],
+  };
+}
+
 // Component 
 const BowlingAnalysis: React.FC = () => {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -111,18 +140,27 @@ const BowlingAnalysis: React.FC = () => {
     setErrorMsg("");
 
     try {
-      setPhase("uploading");
-      const res = await bowlingApi.analyze(file, (p) => {
-        setUploadProgress(p);
-        if (p >= 100) setPhase("processing");
-      });
+      // Upload to GCS + queue Cloud Tasks processing
+      const submissionId = await cloudUploadAndProcess(
+        file,
+        "BOWLING",
+        (p) => setUploadProgress(p),
+      );
 
-      setResult(res.data as AnalysisResult);
+      // Switch to processing phase while Cloud Tasks runs ML pipeline
+      setPhase("processing");
+
+      // Poll until results are ready (DRAFT_REVIEW / PUBLISHED)
+      const sub = await pollSubmissionResult(submissionId);
+
+      // Map SubmissionDetail → AnalysisResult for the existing UI
+      setResult(mapSubmissionToResult(sub));
       setPhase("done");
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail ?? "Analysis failed. Please try again.";
+          ?.detail ??
+        (err instanceof Error ? err.message : "Analysis failed. Please try again.");
       setErrorMsg(msg);
       setPhase("error");
     }
@@ -267,8 +305,13 @@ const BowlingAnalysis: React.FC = () => {
               <Progress value={phase === "processing" ? 100 : uploadProgress} />
               <p className="text-xs text-slate-400 text-center">
                 {phase === "uploading"
-                  ? `Uploading… ${uploadProgress}%`
-                  : "Processing — this may take a minute…"}
+                  ? `Uploading to cloud… ${uploadProgress}%`
+                  : (
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      AI analysis in progress — this may take a few minutes…
+                    </span>
+                  )}
               </p>
             </div>
           )}

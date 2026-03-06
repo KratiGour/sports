@@ -211,3 +211,90 @@ def confirm_upload(
         status=sub.status.value,
         blob_name=sub.video_url,
     )
+
+
+# Response schema for start-processing
+class StartProcessingResponse(BaseModel):
+    submission_id: str
+    status: str
+    task_name: str | None = None
+
+
+# POST /start-processing  (triggers Cloud Tasks ML pipeline)
+@router.post("/start-processing", response_model=StartProcessingResponse)
+def start_processing(
+    submission_id: str = Query(..., description="Submission ID to process"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StartProcessingResponse:
+    """
+    Queue background ML processing for a confirmed upload.
+
+    Works for both:
+      - Self-service flow (player uploads via Bowling/Batting page)
+      - Coach-mediated flow (coach triggers analysis)
+
+    On Cloud Run (Cloud Tasks available):
+      Enqueues a task → returns immediately with status=PROCESSING.
+    On local dev (no Cloud Tasks):
+      Marks PROCESSING and returns — caller must use the old sync
+      ``/submissions/{id}/analyze`` endpoint separately.
+    """
+    sub: VideoSubmission | None = (
+        db.query(VideoSubmission)
+        .filter(VideoSubmission.id == submission_id)
+        .first()
+    )
+
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+
+    # Auth: owner (player or coach) or admin
+    is_owner = sub.player_id == current_user.id or sub.coach_id == current_user.id
+    is_admin = current_user.role == "ADMIN"
+    if not (is_owner or is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized to process this submission.")
+
+    if sub.status != SubmissionStatus.PENDING:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot process — current status is '{sub.status.value}'. Only PENDING submissions can be queued.",
+        )
+
+    # Import Cloud Tasks utility
+    from utils.cloud_tasks import queue_processing_task, CLOUD_TASKS_AVAILABLE
+
+    if CLOUD_TASKS_AVAILABLE:
+        task_name = queue_processing_task(sub.id, sub.video_url)
+        if not task_name:
+            raise HTTPException(status_code=500, detail="Failed to enqueue processing task.")
+
+        # Mark PROCESSING so frontend sees the correct state immediately
+        sub.status = SubmissionStatus.PROCESSING
+        db.commit()
+
+        logger.info(
+            "Processing queued via Cloud Tasks — submission=%s task=%s",
+            sub.id,
+            task_name,
+        )
+        return StartProcessingResponse(
+            submission_id=sub.id,
+            status="PROCESSING",
+            task_name=task_name,
+        )
+    else:
+        # Local dev: no Cloud Tasks — just mark PROCESSING.
+        sub.status = SubmissionStatus.PROCESSING
+        db.commit()
+
+        logger.warning(
+            "Cloud Tasks unavailable — submission %s marked PROCESSING but not queued. "
+            "Use /submissions/{id}/analyze for local processing.",
+            sub.id,
+        )
+        return StartProcessingResponse(
+            submission_id=sub.id,
+            status="PROCESSING",
+            task_name=None,
+        )

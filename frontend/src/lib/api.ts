@@ -435,7 +435,73 @@ export const storageApi = {
 
   /** Trigger background ML processing via Cloud Tasks */
   startProcessing: (submissionId: string) =>
-    api.post(`/submissions/${submissionId}/analyze`, null, { timeout: 30000 }),
+    api.post<{ submission_id: string; status: string; task_name: string | null }>(
+      '/storage/start-processing',
+      null,
+      { params: { submission_id: submissionId }, timeout: 30000 },
+    ),
+
+  /** Fetch submission detail (used for polling) */
+  getSubmission: (submissionId: string) =>
+    api.get<SubmissionDetail>(`/submissions/${submissionId}`),
 };
+
+// Cloud Analysis — GCS upload + Cloud Tasks + polling
+/**
+ * Upload a video file to GCS and queue it for ML processing.
+ * Returns the submission ID once the task is queued.
+ */
+export async function cloudUploadAndProcess(
+  file: File,
+  analysisType: 'BATTING' | 'BOWLING',
+  onProgress?: (progress: number) => void,
+): Promise<string> {
+  // 1. Get signed URL
+  const { data: urlData } = await storageApi.getUploadUrl(file.name, file.type, analysisType);
+  const { signed_url, submission_id } = urlData;
+
+  // 2. Upload file directly to GCS
+  await axios.put(signed_url, file, {
+    headers: { 'Content-Type': file.type },
+    onUploadProgress: (evt) => {
+      if (evt.total && onProgress) {
+        onProgress(Math.round((evt.loaded * 100) / evt.total));
+      }
+    },
+  });
+
+  // 3. Confirm the upload landed
+  await storageApi.confirmUpload(submission_id);
+
+  // 4. Queue ML processing
+  await storageApi.startProcessing(submission_id);
+
+  return submission_id;
+}
+
+/**
+ * Poll a submission until processing completes (DRAFT_REVIEW / PUBLISHED).
+ * Resolves with the full SubmissionDetail once results are available.
+ */
+export async function pollSubmissionResult(
+  submissionId: string,
+  intervalMs = 8000,
+  maxWaitMs = 1200000, // 20 min
+): Promise<SubmissionDetail> {
+  const maxAttempts = Math.ceil(maxWaitMs / intervalMs);
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    const { data } = await storageApi.getSubmission(submissionId);
+
+    if (data.status === 'DRAFT_REVIEW' || data.status === 'PUBLISHED') {
+      return data;
+    }
+    // If status rolled back to PENDING after being PROCESSING → processing failed
+    if (data.status === 'PENDING' && i > 2) {
+      throw new Error('Processing failed on the server. Please try again.');
+    }
+  }
+  throw new Error('Processing timed out. Your results will appear in History when ready.');
+}
 
 export default api;

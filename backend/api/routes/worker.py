@@ -158,7 +158,7 @@ def process_video(
         if sub is None:
             raise HTTPException(status_code=404, detail="Submission not found")
 
-        if sub.status not in (SubmissionStatus.PENDING,):
+        if sub.status not in (SubmissionStatus.PENDING, SubmissionStatus.PROCESSING):
             raise HTTPException(
                 status_code=409,
                 detail=f"Submission already in '{sub.status.value}' — cannot re-process",

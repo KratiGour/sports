@@ -463,8 +463,8 @@ def get_submission(
     if not (is_player or is_coach or is_admin):
         raise HTTPException(status_code=403, detail="Not authorized to view this submission.")
 
-    # Players can only see full detail if PUBLISHED
-    if is_player and sub.status != SubmissionStatus.PUBLISHED:
+    # Players can only see full detail if PUBLISHED or self-service (player == coach)(testing use case for bowling/batting analysis pages). Self-service uploads (via BowlingAnalysis / BattingAnalysis page) set coach_id = player_id, so the player needs full access to see their own AI results.
+    if is_player and not is_coach and sub.status != SubmissionStatus.PUBLISHED:
         # Return a stripped version (player sees status but not AI draft)
         return SubmissionDetail(
             id=sub.id,
