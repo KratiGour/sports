@@ -113,6 +113,22 @@ _batting_gemini = BattingGeminiManager() if BATTING_ENGINE_AVAILABLE else None
 
 
 #  HELPERS
+def _gcs_to_signed_url(gs_uri: str | None) -> str | None:
+    """
+    Convert a ``gs://bucket/blob`` URI into a publicly accessible HTTPS URL.
+
+    New uploads store the public URL directly, so this only runs for legacy
+    DB records that still hold a ``gs://`` URI.
+    Bucket has Uniform Bucket-Level Access enabled — we cannot use object ACLs
+    or generate_signed_url(). Instead we construct the deterministic public URL.
+    """
+    if not gs_uri or not gs_uri.startswith("gs://"):
+        return gs_uri
+    without_scheme = gs_uri[5:]  # strip "gs://"
+    bucket_name, _, blob_name = without_scheme.partition("/")
+    return f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+
+
 def _to_summary(sub: VideoSubmission) -> SubmissionSummary:
     return SubmissionSummary(
         id=sub.id,
@@ -126,7 +142,7 @@ def _to_summary(sub: VideoSubmission) -> SubmissionSummary:
         created_at=sub.created_at,
         analyzed_at=sub.analyzed_at,
         published_at=sub.published_at,
-        pdf_report_url=sub.pdf_report_url,
+        pdf_report_url=_gcs_to_signed_url(sub.pdf_report_url),
     )
 
 
@@ -143,11 +159,11 @@ def _to_detail(sub: VideoSubmission) -> SubmissionDetail:
         video_url=sub.video_url,
         raw_biometrics=sub.raw_biometrics,
         phase_info=sub.phase_info,
-        annotated_video_url=sub.annotated_video_url,
-        key_frame_url=sub.key_frame_url,
+        annotated_video_url=_gcs_to_signed_url(sub.annotated_video_url),
+        key_frame_url=_gcs_to_signed_url(sub.key_frame_url),
         ai_draft_text=sub.ai_draft_text,
         coach_final_text=sub.coach_final_text,
-        pdf_report_url=sub.pdf_report_url,
+        pdf_report_url=_gcs_to_signed_url(sub.pdf_report_url),
         created_at=sub.created_at,
         analyzed_at=sub.analyzed_at,
         published_at=sub.published_at,

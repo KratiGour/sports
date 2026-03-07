@@ -12,9 +12,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { useThemeStore } from '../../store/themeStore';
-import { submissionsApi, type SubmissionDetail } from '../../lib/api';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { submissionsApi, resolveMediaUrl, type SubmissionDetail } from '../../lib/api';
 
 // Metric colors for charts
 const METRIC_COLORS: Record<string, string> = {
@@ -178,13 +176,13 @@ export default function AnalysisEditor() {
                 <video
                   controls
                   className="w-full h-full"
-                  src={`${API_BASE}${submission.annotated_video_url}`}
+                  src={resolveMediaUrl(submission.annotated_video_url)}
                 />
               ) : (
                 <video
                   controls
                   className="w-full h-full"
-                  src={`${API_BASE}${submission.video_url}`}
+                  src={resolveMediaUrl(submission.video_url)}
                 />
               )}
             </div>
@@ -199,7 +197,7 @@ export default function AnalysisEditor() {
                 </h2>
               </div>
               <img
-                src={`${API_BASE}${submission.key_frame_url}`}
+                src={resolveMediaUrl(submission.key_frame_url)}
                 alt="Key frame"
                 className="w-full"
               />

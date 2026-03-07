@@ -4,6 +4,17 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 // Base URL from environment or default
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+/**
+ * Resolve a media URL for display in the browser.
+ * - Already-absolute URLs (signed GCS URLs etc.) pass through unchanged.
+ * - Relative paths (e.g. /static/...) get the API base prepended.
+ */
+export function resolveMediaUrl(path: string | null | undefined): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
 // Create axios instance
 export const api = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,

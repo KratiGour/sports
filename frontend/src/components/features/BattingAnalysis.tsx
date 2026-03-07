@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect } from "react";
-import { battingApi, cloudUploadAndProcess, pollSubmissionResult, type SubmissionDetail } from "../../lib/api";
+import { battingApi, cloudUploadAndProcess, pollSubmissionResult, resolveMediaUrl, type SubmissionDetail } from "../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Progress } from "../ui/Progress";
@@ -199,11 +199,7 @@ const BattingAnalysis: React.FC = () => {
     if (fileRef.current) fileRef.current.value = "";
   }, []);
 
-  const reportFullUrl = (url: string | null | undefined) => {
-    if (!url) return null;
-    const base = import.meta.env.VITE_API_URL || "http://localhost:8000";
-    return `${base}${url}`;
-  };
+
 
   // Render 
   return (
@@ -266,7 +262,7 @@ const BattingAnalysis: React.FC = () => {
                       )}
                       {h.report_url && (
                         <a
-                          href={reportFullUrl(h.report_url)!}
+                          href={resolveMediaUrl(h.report_url)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-amber-400 hover:underline flex items-center gap-0.5"
@@ -449,13 +445,13 @@ const BattingAnalysis: React.FC = () => {
                       controls
                       preload="metadata"
                       className="w-full h-auto max-h-[600px]"
-                      src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${result.annotated_video_url}`}
+                      src={resolveMediaUrl(result.annotated_video_url)}
                       onError={(e) => {
                         console.error("Video load error:", e);
                       }}
                     >
                       <source
-                        src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${result.annotated_video_url}`}
+                        src={resolveMediaUrl(result.annotated_video_url)}
                         type="video/mp4"
                       />
                       Your browser does not support video playback.
@@ -625,7 +621,7 @@ const BattingAnalysis: React.FC = () => {
             {/* Report download */}
             {result.report_url && (
               <a
-                href={reportFullUrl(result.report_url)!}
+                href={resolveMediaUrl(result.report_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block"

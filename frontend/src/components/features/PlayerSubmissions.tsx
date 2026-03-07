@@ -10,11 +10,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useThemeStore } from '../../store/themeStore';
 import {
   submissionsApi,
+  resolveMediaUrl,
   type SubmissionSummary,
   type CoachListItem,
 } from '../../lib/api';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   PENDING: { label: 'Pending Review', color: 'yellow', icon: 'fas fa-clock' },
@@ -378,7 +377,7 @@ export default function PlayerSubmissions() {
                       <motion.a
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        href={`${API_BASE}${sub.pdf_report_url}`}
+                        href={resolveMediaUrl(sub.pdf_report_url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-medium shadow-md hover:shadow-lg transition-all"

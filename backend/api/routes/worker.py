@@ -203,9 +203,9 @@ def process_video(
             key_frame_url=key_frame_url,
         )
 
-        # Store GCS PDF path
+        # Store PDF public URL (pdf_blob_name now holds the full public URL)
         if pdf_blob_name:
-            sub.pdf_report_url = f"gs://{GCS_BUCKET_NAME}/{pdf_blob_name}"
+            sub.pdf_report_url = pdf_blob_name
             db.commit()
 
         logger.info("Worker finished — submission=%s → DRAFT_REVIEW", sub.id)
@@ -268,7 +268,7 @@ def _run_bowling(
     if _bucket:
         ann_blob = _bucket.blob(annotated_blob_name)
         ann_blob.upload_from_filename(annotated_tmp)
-        annotated_url = f"gs://{GCS_BUCKET_NAME}/{annotated_blob_name}"
+        annotated_url = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{annotated_blob_name}"
         os.remove(annotated_tmp)
 
     # Key frame
@@ -280,8 +280,9 @@ def _run_bowling(
         cv2.imwrite(frame_tmp, cv2.cvtColor(img_arr, cv2.COLOR_RGB2BGR))
         frame_blob_name = f"key_frames/{submission_id}.jpg"
         if _bucket:
-            _bucket.blob(frame_blob_name).upload_from_filename(frame_tmp)
-            key_frame_url = f"gs://{GCS_BUCKET_NAME}/{frame_blob_name}"
+            frame_blob = _bucket.blob(frame_blob_name)
+            frame_blob.upload_from_filename(frame_tmp)
+            key_frame_url = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{frame_blob_name}"
             os.remove(frame_tmp)
 
     # AI feedback
@@ -314,7 +315,7 @@ def _run_batting(
     if _bucket:
         ann_blob = _bucket.blob(annotated_blob_name)
         ann_blob.upload_from_filename(annotated_tmp)
-        annotated_url = f"gs://{GCS_BUCKET_NAME}/{annotated_blob_name}"
+        annotated_url = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{annotated_blob_name}"
         os.remove(annotated_tmp)
 
     # Key frame (impact)
@@ -327,8 +328,9 @@ def _run_batting(
         cv2.imwrite(frame_tmp, cv2.cvtColor(img_arr, cv2.COLOR_RGB2BGR))
         frame_blob_name = f"key_frames/{submission_id}.jpg"
         if _bucket:
-            _bucket.blob(frame_blob_name).upload_from_filename(frame_tmp)
-            key_frame_url = f"gs://{GCS_BUCKET_NAME}/{frame_blob_name}"
+            frame_blob = _bucket.blob(frame_blob_name)
+            frame_blob.upload_from_filename(frame_tmp)
+            key_frame_url = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{frame_blob_name}"
             os.remove(frame_tmp)
 
     # AI feedback
@@ -384,10 +386,12 @@ def _upload_pdf(
 
         blob_name = f"reports/{report_name}"
         if _bucket:
-            _bucket.blob(blob_name).upload_from_filename(tmp_report, content_type="application/pdf")
+            pdf_blob = _bucket.blob(blob_name)
+            pdf_blob.upload_from_filename(tmp_report, content_type="application/pdf")
             os.remove(tmp_report)
-            logger.info("PDF uploaded → gs://%s/%s", GCS_BUCKET_NAME, blob_name)
-            return blob_name
+            pdf_public_url = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{blob_name}"
+            logger.info("PDF uploaded → %s", pdf_public_url)
+            return pdf_public_url
         return None
 
     except Exception as exc:
