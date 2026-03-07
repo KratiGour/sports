@@ -46,6 +46,12 @@ temp/
 tmp/
 *.tmp
 
+# Deployment config (not needed inside the container)
+render.yaml
+Procfile
+cloudrun.yaml
+cors.json
+
 # macOS
 .DS_Store
 

@@ -16,8 +16,8 @@ Shared:
 """
 
 import logging
-import shutil
 import os
+import tempfile
 import uuid
 from pathlib import Path
 from datetime import datetime
@@ -25,6 +25,7 @@ from datetime import datetime
 import cv2
 import numpy as np
 import pandas as pd
+import google.cloud.storage as gcs
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -74,14 +75,34 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-#  Storage dirs 
-SUBMISSIONS_DIR = Path("storage/submissions")
-REPORTS_DIR = Path("storage/reports")
-ANNOTATED_DIR = Path("storage/submission_videos")
-TEMP_FRAMES_DIR = Path("storage/temp_frames")
+#  Storage dirs — use /tmp/ on Cloud Run (ephemeral), local storage/ for dev
+_USE_TMP = os.getenv("CLOUD_RUN", "").lower() in ("1", "true", "yes")
+if _USE_TMP:
+    _tmp = Path(tempfile.gettempdir())
+    SUBMISSIONS_DIR = _tmp / "submissions"
+    REPORTS_DIR = _tmp / "reports"
+    ANNOTATED_DIR = _tmp / "submission_videos"
+    TEMP_FRAMES_DIR = _tmp / "temp_frames"
+else:
+    SUBMISSIONS_DIR = Path("storage/submissions")
+    REPORTS_DIR = Path("storage/reports")
+    ANNOTATED_DIR = Path("storage/submission_videos")
+    TEMP_FRAMES_DIR = Path("storage/temp_frames")
 
 for d in [SUBMISSIONS_DIR, REPORTS_DIR, ANNOTATED_DIR, TEMP_FRAMES_DIR]:
     d.mkdir(parents=True, exist_ok=True)
+
+# GCS client for B2B2C uploads (POST /upload → GCS instead of local disk)
+_GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME", "")
+_gcs_client = None
+_gcs_bucket_upload = None
+try:
+    if _GCS_BUCKET_NAME:
+        _gcs_client = gcs.Client()
+        _gcs_bucket_upload = _gcs_client.bucket(_GCS_BUCKET_NAME)
+        logger.info("Submissions GCS client ready — bucket '%s'", _GCS_BUCKET_NAME)
+except Exception as _gcs_init_err:
+    logger.warning("Submissions GCS client init failed: %s", _gcs_init_err)
 
 #  Singleton engines (heavy init — reuse) 
 _bowling_analyzer = CricketPoseAnalyzer() if BOWLING_ENGINE_AVAILABLE and MEDIAPIPE_AVAILABLE else None
@@ -92,6 +113,22 @@ _batting_gemini = BattingGeminiManager() if BATTING_ENGINE_AVAILABLE else None
 
 
 #  HELPERS
+def _gcs_to_signed_url(gs_uri: str | None) -> str | None:
+    """
+    Convert a ``gs://bucket/blob`` URI into a publicly accessible HTTPS URL.
+
+    New uploads store the public URL directly, so this only runs for legacy
+    DB records that still hold a ``gs://`` URI.
+    Bucket has Uniform Bucket-Level Access enabled — we cannot use object ACLs
+    or generate_signed_url(). Instead we construct the deterministic public URL.
+    """
+    if not gs_uri or not gs_uri.startswith("gs://"):
+        return gs_uri
+    without_scheme = gs_uri[5:]  # strip "gs://"
+    bucket_name, _, blob_name = without_scheme.partition("/")
+    return f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+
+
 def _to_summary(sub: VideoSubmission) -> SubmissionSummary:
     return SubmissionSummary(
         id=sub.id,
@@ -105,7 +142,7 @@ def _to_summary(sub: VideoSubmission) -> SubmissionSummary:
         created_at=sub.created_at,
         analyzed_at=sub.analyzed_at,
         published_at=sub.published_at,
-        pdf_report_url=sub.pdf_report_url,
+        pdf_report_url=_gcs_to_signed_url(sub.pdf_report_url),
     )
 
 
@@ -122,11 +159,11 @@ def _to_detail(sub: VideoSubmission) -> SubmissionDetail:
         video_url=sub.video_url,
         raw_biometrics=sub.raw_biometrics,
         phase_info=sub.phase_info,
-        annotated_video_url=sub.annotated_video_url,
-        key_frame_url=sub.key_frame_url,
+        annotated_video_url=_gcs_to_signed_url(sub.annotated_video_url),
+        key_frame_url=_gcs_to_signed_url(sub.key_frame_url),
         ai_draft_text=sub.ai_draft_text,
         coach_final_text=sub.coach_final_text,
-        pdf_report_url=sub.pdf_report_url,
+        pdf_report_url=_gcs_to_signed_url(sub.pdf_report_url),
         created_at=sub.created_at,
         analyzed_at=sub.analyzed_at,
         published_at=sub.published_at,
@@ -198,18 +235,33 @@ async def player_upload(
     if not coach:
         raise HTTPException(status_code=404, detail="Coach not found.")
 
-    # Save file
-    file_id = str(uuid.uuid4())
-    safe_filename = f"{file_id}_{file.filename}"
-    save_path = SUBMISSIONS_DIR / safe_filename
+    # Upload to GCS (Cloud Run) or local disk (dev)
+    file_id = str(uuid.uuid4())[:12]
+    safe_name = "".join(
+        c if c.isalnum() or c in "._-" else "_"
+        for c in (file.filename or "upload.mp4")
+    )
 
-    try:
-        with open(save_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save video: {e}")
-
-    video_url = f"/static/submissions/{safe_filename}"
+    if _gcs_bucket_upload is not None:
+        blob_name = f"raw_videos/{file_id}_{safe_name}"
+        try:
+            content = await file.read()
+            blob = _gcs_bucket_upload.blob(blob_name)
+            blob.upload_from_string(content, content_type=file.content_type or "video/mp4")
+            video_url = blob_name  # GCS object path — used by the worker
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to upload to GCS: {e}")
+    else:
+        # Local dev fallback — save to disk
+        safe_filename = f"{file_id}_{safe_name}"
+        save_path = SUBMISSIONS_DIR / safe_filename
+        try:
+            content = await file.read()
+            with open(save_path, "wb") as buffer:
+                buffer.write(content)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save video: {e}")
+        video_url = f"/static/submissions/{safe_filename}"
 
     sub = create_submission(
         db,
@@ -454,8 +506,8 @@ def get_submission(
     if not (is_player or is_coach or is_admin):
         raise HTTPException(status_code=403, detail="Not authorized to view this submission.")
 
-    # Players can only see full detail if PUBLISHED
-    if is_player and sub.status != SubmissionStatus.PUBLISHED:
+    # Players can only see full detail if PUBLISHED or self-service (player == coach)(testing use case for bowling/batting analysis pages). Self-service uploads (via BowlingAnalysis / BattingAnalysis page) set coach_id = player_id, so the player needs full access to see their own AI results.
+    if is_player and not is_coach and sub.status != SubmissionStatus.PUBLISHED:
         # Return a stripped version (player sees status but not AI draft)
         return SubmissionDetail(
             id=sub.id,

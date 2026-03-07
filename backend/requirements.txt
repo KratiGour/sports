@@ -28,18 +28,18 @@ bcrypt==4.1.2
 python-jose[cryptography]>=3.3.0
 
 # Video Processing
-yt-dlp>=2024.12.13           # YouTube downloader 
+yt-dlp>=2024.12.13           # YouTube downloader
 opencv-python-headless>=4.8.1  # Video analysis 
 
 # Machine Learning & OCR
 numpy>=1.26.2
-easyocr>=1.7.0               # OCR text recognition
 
-# Multi-Modal Detection 
-mediapipe>=0.10.11           # Pose estimation (pinned for stability)
-torch>=2.0.0                 # TSM action recognition backbone
-torchvision>=0.15.0          # Vision models and transforms
-scipy>=1.11.0                # Audio FFT analysis
+# Pose Estimation (Cloud Run worker)
+# Pinned to last version that ships the legacy mp.solutions.pose API.
+mediapipe==0.10.14           # MediaPipe pose estimation — requires libegl1 + libglx0 at runtime
+
+# NOTE: torch, torchvision, scipy, easyocr are only used by the standalone OCR highlight-reel pipeline (scripts/ocr_engine.py), which does NOT run on Cloud Run.  Install them locally
+#   pip install torch torchvision scipy easyocr
 
 # Bowling & Batting Analysis
 pandas>=2.0.0                # DataFrame operations for metrics analysis
@@ -47,3 +47,7 @@ google-genai>=0.6.0
 fpdf2>=2.7.0
 Pillow>=10.0.0
 reportlab>=4.0.9             # PDF report generation 
+
+# Google Cloud
+google-cloud-storage>=2.14.0 # GCS direct uploads (signed URLs)
+google-cloud-tasks>=2.14.0   # Async worker dispatch

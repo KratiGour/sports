@@ -389,7 +389,9 @@ class BattingGeminiManager:
             return None
         return genai.Client(api_key=self.keys[self.current_index % len(self.keys)])
 
-    def call_gemini(self, prompt: str, video_path: str | None = None) -> str:
+    def call_gemini(self, prompt: str, video_path: str | None = None, _retry_count: int = 0) -> str:
+        """Call Gemini with automatic retry on transient / rate-limit errors."""
+        MAX_RETRIES = 3
         client = self.get_client()
         if not client:
             return "AI Feedback unavailable. (No API Key)"
@@ -410,6 +412,14 @@ class BattingGeminiManager:
             )
             return response.text
         except Exception as e:
+            err = str(e).lower()
+            is_retryable = any(k in err for k in ("429", "rate", "resource_exhausted", "503", "unavailable", "deadline"))
+            if is_retryable and _retry_count < MAX_RETRIES:
+                wait = 2 ** (_retry_count + 1)  # 2s, 4s, 8s
+                logger.warning(f"Gemini rate-limited, retrying in {wait}s (attempt {_retry_count + 1}/{MAX_RETRIES})")
+                time.sleep(wait)
+                self.current_index += 1  # rotate to next API key
+                return self.call_gemini(prompt, video_path, _retry_count + 1)
             return f"Gemini Error: {e}"
 
 

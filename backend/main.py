@@ -21,21 +21,23 @@ from database.models import (
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-# Ensure storage directories exist
-STORAGE_DIRS = [
-    "storage/uploads",
-    "storage/raw",
-    "storage/trimmed",
-    "storage/highlight",
-    "storage/reports",
-    "storage/bowling_videos",
-    "storage/batting_videos",
-    "storage/submissions",
-    "storage/submission_videos",
-    "storage/temp_frames",
-]
-for dir_path in STORAGE_DIRS:
-    Path(dir_path).mkdir(parents=True, exist_ok=True)
+# Ensure storage directories exist (skip on Cloud Run — ephemeral, uses /tmp/)
+_CLOUD_RUN = os.getenv("CLOUD_RUN", "").lower() in ("1", "true", "yes")
+if not _CLOUD_RUN:
+    STORAGE_DIRS = [
+        "storage/uploads",
+        "storage/raw",
+        "storage/trimmed",
+        "storage/highlight",
+        "storage/reports",
+        "storage/bowling_videos",
+        "storage/batting_videos",
+        "storage/submissions",
+        "storage/submission_videos",
+        "storage/temp_frames",
+    ]
+    for dir_path in STORAGE_DIRS:
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
@@ -82,14 +84,19 @@ A platform for automated cricket highlight generation using OCR-based event dete
 # Get allowed origins from environment or use defaults for local dev
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").split(",")
 if not ALLOWED_ORIGINS or ALLOWED_ORIGINS == [""]:
-    # Default origins for local development
+    # Default origins for local development + production deployments
     ALLOWED_ORIGINS = [
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
+        "https://sports-teal-two.vercel.app",  # Vercel production frontend
     ]
+    # Append additional production frontend URL from env if set
+    _frontend = os.getenv("FRONTEND_URL", "").strip()
+    if _frontend and _frontend not in ALLOWED_ORIGINS:
+        ALLOWED_ORIGINS.append(_frontend)
 else:
     # Clean up any whitespace from env var
     ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS if origin.strip()]
@@ -99,6 +106,7 @@ logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://sports-.*-almanets-projects-17904779\.vercel\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -106,16 +114,17 @@ app.add_middleware(
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
-# Mount static files for video/clip serving
-app.mount("/static/uploads", StaticFiles(directory="storage/uploads"), name="uploads")
-app.mount("/static/clips", StaticFiles(directory="storage/trimmed"), name="clips")
-app.mount("/static/highlights", StaticFiles(directory="storage/highlight"), name="highlights")
-app.mount("/static/reports", StaticFiles(directory="storage/reports"), name="reports")
-app.mount("/static/bowling_videos", StaticFiles(directory="storage/bowling_videos"), name="bowling_videos")
-app.mount("/static/batting_videos", StaticFiles(directory="storage/batting_videos"), name="batting_videos")
-app.mount("/static/submissions", StaticFiles(directory="storage/submissions"), name="submissions")
-app.mount("/static/submission_videos", StaticFiles(directory="storage/submission_videos"), name="submission_videos")
-app.mount("/static/temp_frames", StaticFiles(directory="storage/temp_frames"), name="temp_frames")
+# Mount static files for video/clip serving (skip on Cloud Run — served from GCS)
+if not _CLOUD_RUN:
+    app.mount("/static/uploads", StaticFiles(directory="storage/uploads"), name="uploads")
+    app.mount("/static/clips", StaticFiles(directory="storage/trimmed"), name="clips")
+    app.mount("/static/highlights", StaticFiles(directory="storage/highlight"), name="highlights")
+    app.mount("/static/reports", StaticFiles(directory="storage/reports"), name="reports")
+    app.mount("/static/bowling_videos", StaticFiles(directory="storage/bowling_videos"), name="bowling_videos")
+    app.mount("/static/batting_videos", StaticFiles(directory="storage/batting_videos"), name="batting_videos")
+    app.mount("/static/submissions", StaticFiles(directory="storage/submissions"), name="submissions")
+    app.mount("/static/submission_videos", StaticFiles(directory="storage/submission_videos"), name="submission_videos")
+    app.mount("/static/temp_frames", StaticFiles(directory="storage/temp_frames"), name="temp_frames")
 
 
 # Health Check Endpoints 
@@ -150,7 +159,7 @@ def db_health_check():
 
 
 # Include API Routers 
-from api.routes import auth, videos, jobs, requests, player_stats, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE, submissions, SUBMISSIONS_AVAILABLE 
+from api.routes import auth, videos, jobs, requests, player_stats, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE, submissions, SUBMISSIONS_AVAILABLE, storage, GCS_AVAILABLE, worker, WORKER_AVAILABLE
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
@@ -187,6 +196,20 @@ if SUBMISSIONS_AVAILABLE and submissions is not None:
     logger.info("B2B2C Submissions pipeline enabled")
 else:
     logger.warning("Submissions pipeline disabled")
+
+# Cloud Storage (Direct-to-GCS signed URL uploads)
+if GCS_AVAILABLE and storage is not None:
+    app.include_router(storage.router, prefix="/api/v1/storage", tags=["storage"])
+    logger.info("Direct-to-GCS upload feature enabled")
+else:
+    logger.warning("Direct-to-GCS upload feature disabled (GCS not configured)")
+
+# Internal Worker endpoint (called by Cloud Tasks, NOT public API)
+if WORKER_AVAILABLE and worker is not None:
+    app.include_router(worker.router, prefix="/internal/worker", tags=["worker"])
+    logger.info("Internal worker endpoint enabled")
+else:
+    logger.warning("Internal worker endpoint disabled")
 
 
 # Entry Point 

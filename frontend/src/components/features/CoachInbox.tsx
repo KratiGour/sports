@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../../store/themeStore';
-import { submissionsApi, type SubmissionSummary } from '../../lib/api';
+import { submissionsApi, storageApi, resolveMediaUrl, type SubmissionSummary } from '../../lib/api';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string; bg: string }> = {
   PENDING: { label: 'Pending', color: 'text-yellow-400', icon: 'fas fa-clock', bg: 'bg-yellow-500/10' },
@@ -47,7 +47,7 @@ export default function CoachInbox() {
     setAnalyzing(id);
     setError('');
     try {
-      await submissionsApi.analyze(id);
+      await storageApi.startProcessing(id);
       await fetchInbox();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Analysis failed';
@@ -190,7 +190,7 @@ export default function CoachInbox() {
                           )}
                           {sub.status === 'PUBLISHED' && sub.pdf_report_url && (
                             <a
-                              href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${sub.pdf_report_url}`}
+                              href={resolveMediaUrl(sub.pdf_report_url)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-medium shadow hover:shadow-lg transition-all"

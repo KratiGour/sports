@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect } from "react";
-import { battingApi } from "../../lib/api";
+import { battingApi, cloudUploadAndProcess, pollSubmissionResult, resolveMediaUrl, type SubmissionDetail } from "../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Progress } from "../ui/Progress";
@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Target,
   Youtube,
+  Loader2,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -81,6 +82,99 @@ interface BattingSummary {
 
 type Phase = "idle" | "uploading" | "processing" | "done" | "error";
 
+// Parser helpers — extract structured data from Gemini free-text response
+function parseDetectedFlaws(text: string): DetectedFlaw[] {
+  const match = text.match(/\*\*WEAKNESSES\*\*([\s\S]*?)(?=\*\*[A-Z]|$)/i);
+  if (!match) return [];
+  return match[1]
+    .split("\n")
+    .filter(l => l.trim().startsWith("-"))
+    .map(line => {
+      const nameMatch = line.match(/\[(.+?)\]/);
+      const ratingMatch = line.match(/Rating:\s*(\d+)/i);
+      const timestampMatch = line.match(/Timestamp:\s*([\d.]+s?)/i);
+      const descMatch = line.match(/\]\s*\.\s*(.+)$/);
+      return {
+        flaw_name: nameMatch?.[1]?.trim() ?? line.replace(/^-\s*/, "").substring(0, 60),
+        description: descMatch?.[1]?.replace(/\[.*?\]/g, "").trim() ?? "",
+        rating: ratingMatch ? parseInt(ratingMatch[1]) : null,
+        timestamp: timestampMatch?.[1]?.trim() ?? null,
+      };
+    })
+    .filter(f => f.flaw_name.length > 0);
+}
+
+function parseDrillRecommendations(text: string): DrillRecommendation[] {
+  const match = text.match(/\*\*RECOMMENDED TUTORIALS\*\*([\s\S]*?)(?=\*\*CRITICAL MANDATE|CRITICAL MANDATE|$)/i);
+  if (!match) return [];
+  const results: DrillRecommendation[] = [];
+  for (const entry of match[1].split(/\n\d+\.\s+/)) {
+    const queryMatch = entry.match(/Search Intent:\s*(.+)/i);
+    const whyMatch = entry.match(/Why this video:\s*(.+)/i);
+    if (!queryMatch) continue;
+    const query = queryMatch[1].trim();
+    results.push({
+      query,
+      title: query,
+      link: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+      reason: whyMatch?.[1]?.trim() ?? "",
+    });
+  }
+  return results;
+}
+
+function stripParsedSections(text: string): string {
+  return text
+    .replace(/\*\*WEAKNESSES\*\*[\s\S]*?(?=\*\*SPECIFIC CORRECTIONS|\*\*PERFORMANCE|$)/i, "")
+    .replace(/\*\*RECOMMENDED TUTORIALS\*\*[\s\S]*/i, "")
+    .trim();
+}
+
+/** Map a SubmissionDetail (async Cloud Tasks result) to the BattingResult shape the UI expects. */
+function mapSubmissionToBattingResult(sub: SubmissionDetail): BattingResult {
+  const summary = (sub.raw_biometrics?.summary ?? {}) as Record<string, Record<string, number>>;
+
+  // Find display_df column names by partial match (BATTING_METRIC_LABELS renames)
+  const findKey = (needle: string) =>
+    Object.keys(summary).find((k) => k.toLowerCase().includes(needle)) ?? "";
+
+  const phases = (sub.phase_info ?? {}) as Record<string, number | null>;
+
+  const fullText = sub.ai_draft_text ?? sub.coach_final_text ?? "";
+  const detectedFlaws = parseDetectedFlaws(fullText);
+  const drillRecs = parseDrillRecommendations(fullText);
+  const cleanedText = stripParsedSections(fullText);
+
+  return {
+    id: sub.id,
+    player_id: sub.player_id,
+    original_filename: sub.original_filename ?? null,
+    biometrics: {
+      avg_head_alignment: summary[findKey("head")]?.mean ?? 0,
+      avg_stride_length: summary[findKey("stride")]?.mean ?? 0,
+      avg_backlift_height: summary[findKey("backlift")]?.mean ?? 0,
+      avg_front_knee_angle: summary[findKey("front knee")]?.mean ?? summary[findKey("knee")]?.mean ?? 0,
+      avg_shoulder_rotation: summary[findKey("shoulder")]?.mean ?? 0,
+    },
+    feedback: {
+      summary: "Batting analysis complete. See full report.",
+      full_text: cleanedText,
+    },
+    phases: {
+      stance_end: phases.stance_end ?? null,
+      stride_peak: phases.stride_peak ?? null,
+      downswing_start: phases.downswing_start ?? null,
+      impact: phases.impact ?? null,
+      followthrough_start: phases.followthrough_start ?? null,
+    },
+    annotated_video_url: sub.annotated_video_url ?? null,
+    report_url: sub.pdf_report_url ?? null,
+    created_at: sub.created_at,
+    detected_flaws: detectedFlaws,
+    drill_recommendations: drillRecs,
+  };
+}
+
 // Component 
 const BattingAnalysis: React.FC = () => {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -123,18 +217,27 @@ const BattingAnalysis: React.FC = () => {
     setErrorMsg("");
 
     try {
-      setPhase("uploading");
-      const res = await battingApi.analyze(file, (p) => {
-        setUploadProgress(p);
-        if (p >= 100) setPhase("processing");
-      });
+      // Upload to GCS + queue Cloud Tasks processing
+      const submissionId = await cloudUploadAndProcess(
+        file,
+        "BATTING",
+        (p) => setUploadProgress(p),
+      );
 
-      setResult(res.data as BattingResult);
+      // Switch to processing phase while Cloud Tasks runs ML pipeline
+      setPhase("processing");
+
+      // Poll until results are ready (DRAFT_REVIEW / PUBLISHED)
+      const sub = await pollSubmissionResult(submissionId);
+
+      // Map SubmissionDetail → BattingResult for the existing UI
+      setResult(mapSubmissionToBattingResult(sub));
       setPhase("done");
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail ?? "Analysis failed. Please try again.";
+          ?.detail ??
+        (err instanceof Error ? err.message : "Analysis failed. Please try again.");
       setErrorMsg(msg);
       setPhase("error");
     }
@@ -149,11 +252,7 @@ const BattingAnalysis: React.FC = () => {
     if (fileRef.current) fileRef.current.value = "";
   }, []);
 
-  const reportFullUrl = (url: string | null | undefined) => {
-    if (!url) return null;
-    const base = import.meta.env.VITE_API_URL || "http://localhost:8000";
-    return `${base}${url}`;
-  };
+
 
   // Render 
   return (
@@ -216,7 +315,7 @@ const BattingAnalysis: React.FC = () => {
                       )}
                       {h.report_url && (
                         <a
-                          href={reportFullUrl(h.report_url)!}
+                          href={resolveMediaUrl(h.report_url)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-amber-400 hover:underline flex items-center gap-0.5"
@@ -282,8 +381,13 @@ const BattingAnalysis: React.FC = () => {
               <Progress value={phase === "processing" ? 100 : uploadProgress} />
               <p className="text-xs text-slate-400 text-center">
                 {phase === "uploading"
-                  ? `Uploading… ${uploadProgress}%`
-                  : "Processing — this may take a minute…"}
+                  ? `Uploading to cloud… ${uploadProgress}%`
+                  : (
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      AI analysis in progress — this may take a few minutes…
+                    </span>
+                  )}
               </p>
             </div>
           )}
@@ -394,13 +498,13 @@ const BattingAnalysis: React.FC = () => {
                       controls
                       preload="metadata"
                       className="w-full h-auto max-h-[600px]"
-                      src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${result.annotated_video_url}`}
+                      src={resolveMediaUrl(result.annotated_video_url)}
                       onError={(e) => {
                         console.error("Video load error:", e);
                       }}
                     >
                       <source
-                        src={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}${result.annotated_video_url}`}
+                        src={resolveMediaUrl(result.annotated_video_url)}
                         type="video/mp4"
                       />
                       Your browser does not support video playback.
@@ -570,7 +674,7 @@ const BattingAnalysis: React.FC = () => {
             {/* Report download */}
             {result.report_url && (
               <a
-                href={reportFullUrl(result.report_url)!}
+                href={resolveMediaUrl(result.report_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block"
