@@ -82,6 +82,54 @@ interface BattingSummary {
 
 type Phase = "idle" | "uploading" | "processing" | "done" | "error";
 
+// Parser helpers — extract structured data from Gemini free-text response
+function parseDetectedFlaws(text: string): DetectedFlaw[] {
+  const match = text.match(/\*\*WEAKNESSES\*\*([\s\S]*?)(?=\*\*[A-Z]|$)/i);
+  if (!match) return [];
+  return match[1]
+    .split("\n")
+    .filter(l => l.trim().startsWith("-"))
+    .map(line => {
+      const nameMatch = line.match(/\[(.+?)\]/);
+      const ratingMatch = line.match(/Rating:\s*(\d+)/i);
+      const timestampMatch = line.match(/Timestamp:\s*([\d.]+s?)/i);
+      const descMatch = line.match(/\]\s*\.\s*(.+)$/);
+      return {
+        flaw_name: nameMatch?.[1]?.trim() ?? line.replace(/^-\s*/, "").substring(0, 60),
+        description: descMatch?.[1]?.replace(/\[.*?\]/g, "").trim() ?? "",
+        rating: ratingMatch ? parseInt(ratingMatch[1]) : null,
+        timestamp: timestampMatch?.[1]?.trim() ?? null,
+      };
+    })
+    .filter(f => f.flaw_name.length > 0);
+}
+
+function parseDrillRecommendations(text: string): DrillRecommendation[] {
+  const match = text.match(/\*\*RECOMMENDED TUTORIALS\*\*([\s\S]*?)(?=\*\*CRITICAL MANDATE|CRITICAL MANDATE|$)/i);
+  if (!match) return [];
+  const results: DrillRecommendation[] = [];
+  for (const entry of match[1].split(/\n\d+\.\s+/)) {
+    const queryMatch = entry.match(/Search Intent:\s*(.+)/i);
+    const whyMatch = entry.match(/Why this video:\s*(.+)/i);
+    if (!queryMatch) continue;
+    const query = queryMatch[1].trim();
+    results.push({
+      query,
+      title: query,
+      link: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+      reason: whyMatch?.[1]?.trim() ?? "",
+    });
+  }
+  return results;
+}
+
+function stripParsedSections(text: string): string {
+  return text
+    .replace(/\*\*WEAKNESSES\*\*[\s\S]*?(?=\*\*SPECIFIC CORRECTIONS|\*\*PERFORMANCE|$)/i, "")
+    .replace(/\*\*RECOMMENDED TUTORIALS\*\*[\s\S]*/i, "")
+    .trim();
+}
+
 /** Map a SubmissionDetail (async Cloud Tasks result) to the BattingResult shape the UI expects. */
 function mapSubmissionToBattingResult(sub: SubmissionDetail): BattingResult {
   const summary = (sub.raw_biometrics?.summary ?? {}) as Record<string, Record<string, number>>;
@@ -91,6 +139,11 @@ function mapSubmissionToBattingResult(sub: SubmissionDetail): BattingResult {
     Object.keys(summary).find((k) => k.toLowerCase().includes(needle)) ?? "";
 
   const phases = (sub.phase_info ?? {}) as Record<string, number | null>;
+
+  const fullText = sub.ai_draft_text ?? sub.coach_final_text ?? "";
+  const detectedFlaws = parseDetectedFlaws(fullText);
+  const drillRecs = parseDrillRecommendations(fullText);
+  const cleanedText = stripParsedSections(fullText);
 
   return {
     id: sub.id,
@@ -105,7 +158,7 @@ function mapSubmissionToBattingResult(sub: SubmissionDetail): BattingResult {
     },
     feedback: {
       summary: "Batting analysis complete. See full report.",
-      full_text: sub.ai_draft_text ?? sub.coach_final_text ?? "",
+      full_text: cleanedText,
     },
     phases: {
       stance_end: phases.stance_end ?? null,
@@ -117,8 +170,8 @@ function mapSubmissionToBattingResult(sub: SubmissionDetail): BattingResult {
     annotated_video_url: sub.annotated_video_url ?? null,
     report_url: sub.pdf_report_url ?? null,
     created_at: sub.created_at,
-    detected_flaws: [],
-    drill_recommendations: [],
+    detected_flaws: detectedFlaws,
+    drill_recommendations: drillRecs,
   };
 }
 
