@@ -12,7 +12,6 @@ import RegisterPage from './pages/RegisterPage';
 import LandingPage from './pages/LandingPage';
 import PlayerDashboard from './pages/PlayerDashboard';
 import CoachDashboard from './pages/CoachDashboard';
-import AdminPlansPage from './pages/AdminPlansPage';
 import AdminDashboard from './pages/AdminDashboard';
 import UploadPage from './pages/UploadPage';
 import HighlightsPage from './pages/HighlightsPage';
@@ -25,9 +24,6 @@ import BattingAnalysisPage from './pages/BattingAnalysisPage';
 import PlayerSubmissionsPage from './pages/PlayerSubmissionsPage';
 import CoachInboxPage from './pages/CoachInboxPage';
 import CoachReviewPage from './pages/CoachReviewPage';
-import SubscriptionPage from './pages/SubscriptionPage';
-import CoachPendingPage from './pages/CoachPendingPage';
-import CoachVerificationPage from './pages/CoachVerificationPage';
 
 // Auth Initializer (runs once on module load) 
 let authInitialized = false;
@@ -139,7 +135,6 @@ export default function AppRouter() {
       <Routes>
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
-        <Route path="/coach-pending" element={<CoachPendingPage />} />
 
         {/* Guest only */}
         <Route element={<GuestRoute />}>
@@ -162,7 +157,6 @@ export default function AppRouter() {
             <Route path="/player/bowling" element={<BowlingAnalysisPage />} />
             <Route path="/player/batting" element={<BattingAnalysisPage />} />
             <Route path="/player/submissions" element={<PlayerSubmissionsPage />} />
-            <Route path="/player/subscription" element={<SubscriptionPage />} />
           </Route>
         </Route>
 
@@ -185,12 +179,9 @@ export default function AppRouter() {
             <Route element={<DashboardLayout />}>
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/upload" element={<UploadPage />} />
-              <Route path="/admin/coaches" element={<CoachVerificationPage />} />
-              <Route path="/admin/plans" element={<AdminPlansPage />} />
             </Route>
           </Route>
         </Route>
-        
 
         {/* Legacy */}
         <Route path="/highlights" element={<Navigate to="/library" replace />} />

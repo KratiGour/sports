@@ -35,7 +35,6 @@ if not _CLOUD_RUN:
         "storage/submissions",
         "storage/submission_videos",
         "storage/temp_frames",
-        "storage/coach_documents",
     ]
     for dir_path in STORAGE_DIRS:
         Path(dir_path).mkdir(parents=True, exist_ok=True)
@@ -126,7 +125,6 @@ if not _CLOUD_RUN:
     app.mount("/static/submissions", StaticFiles(directory="storage/submissions"), name="submissions")
     app.mount("/static/submission_videos", StaticFiles(directory="storage/submission_videos"), name="submission_videos")
     app.mount("/static/temp_frames", StaticFiles(directory="storage/temp_frames"), name="temp_frames")
-    app.mount("/static/coach_documents", StaticFiles(directory="storage/coach_documents"), name="coach_documents")
 
 
 # Health Check Endpoints 
@@ -161,17 +159,10 @@ def db_health_check():
 
 
 # Include API Routers 
-from api.routes import auth, videos, jobs, requests, player_stats, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE, submissions, SUBMISSIONS_AVAILABLE, storage, GCS_AVAILABLE, worker, WORKER_AVAILABLE, admin_coaches
-from api.routes import plan, subscription
+from api.routes import auth, videos, jobs, requests, player_stats, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE, submissions, SUBMISSIONS_AVAILABLE, storage, GCS_AVAILABLE, worker, WORKER_AVAILABLE
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
-
-# Admin routes
-app.include_router(admin_coaches.router, prefix="/api/v1", tags=["admin"])
-app.include_router(plan.router, prefix="/api/v1", tags=["admin"])
-app.include_router(subscription.router, prefix="/api/v1", tags=["subscriptions"])
-
 
 # Video management routes
 app.include_router(videos.router, prefix="/api/v1", tags=["videos"])

@@ -451,7 +451,7 @@ export default function LandingPage() {
                 </Link>
               </div>
 
-              <p className="mt-3 text-xs text-white/45">Cricket specialist is ready and many more games are coming soon</p>
+              <p className="mt-3 text-xs text-white/45">AI-powered sports analysis platform for athletes and coaches</p>
 
               <div className="mt-8 grid grid-cols-3 gap-4">
                 <Stat label="Clips Organized" value="120+" />

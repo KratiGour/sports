@@ -8,10 +8,8 @@ Routes:
 - requests: Match request voting system
 - bowling: Bowling biomechanics analysis 
 - batting: Batting performance analysis
-- admin_coaches: Admin routes for coach verification
 """
-from . import auth, videos, jobs, requests, admin_coaches
-
+from . import auth, videos, jobs, requests
 
 try:
     from . import bowling
@@ -54,7 +52,7 @@ except Exception as e:
     WORKER_AVAILABLE = False
 
 __all__ = [
-    "auth", "videos", "jobs", "requests", "admin_coaches",
+    "auth", "videos", "jobs", "requests",
     "bowling", "BOWLING_AVAILABLE",
     "batting", "BATTING_AVAILABLE",
     "submissions", "SUBMISSIONS_AVAILABLE",

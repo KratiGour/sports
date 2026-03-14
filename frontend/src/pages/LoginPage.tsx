@@ -19,7 +19,6 @@ export default function LoginPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   
   // Get success message from registration
   const successMessage = location.state?.message;
@@ -44,12 +43,6 @@ export default function LoginPage() {
         navigate('/');
       }
     } catch (err: unknown) {
-      const error = err as any;
-      // Check if it's a coach pending verification error
-      if (error?.response?.status === 403 && error?.response?.data?.detail?.includes('pending')) {
-        navigate('/coach-pending');
-        return;
-      }
       setError(err instanceof Error ? err.message : 'An error occurred during login');
     } finally {
       setLoading(false);
@@ -170,20 +163,16 @@ export default function LoginPage() {
               </label>
               <div className="relative">
                 <input
-                  type={showPassword ? "text" : "password"}
+                  type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 pr-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-blue-400 focus:bg-white/10 focus:outline-none transition-all duration-300"
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-blue-400 focus:bg-white/10 focus:outline-none transition-all duration-300"
                   required
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-white/40 hover:text-white/70 transition-colors"
-                >
-                  <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                </button>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  <i className="fas fa-lock text-white/30"></i>
+                </div>
               </div>
             </motion.div>
 
