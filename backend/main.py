@@ -21,6 +21,40 @@ from database.models import (
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+
+def _ensure_users_schema(db_session) -> None:
+    """Patch legacy users schema for both PostgreSQL and SQLite."""
+    try:
+        dialect = db_session.bind.dialect.name if db_session.bind is not None else ""
+
+        if dialect == "sqlite":
+            # SQLite support for ADD COLUMN IF NOT EXISTS depends on engine version.
+            # Use PRAGMA + plain ADD COLUMN for broad compatibility.
+            cols = db_session.execute(text("PRAGMA table_info(users)")).fetchall()
+            existing = {str(c[1]).lower() for c in cols}
+
+            if "subscription_plan" not in existing:
+                db_session.execute(text("ALTER TABLE users ADD COLUMN subscription_plan VARCHAR(50) DEFAULT 'BASIC'"))
+            if "coach_status" not in existing:
+                db_session.execute(text("ALTER TABLE users ADD COLUMN coach_status VARCHAR(20) DEFAULT 'pending'"))
+            if "coach_document_url" not in existing:
+                db_session.execute(text("ALTER TABLE users ADD COLUMN coach_document_url TEXT"))
+            if "stripe_customer_id" not in existing:
+                db_session.execute(text("ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(255)"))
+        else:
+            # Safe on Postgres and no-ops when columns already exist.
+            db_session.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_plan VARCHAR(50) DEFAULT 'BASIC'"))
+            db_session.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS coach_status VARCHAR(20) DEFAULT 'pending'"))
+            db_session.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS coach_document_url TEXT"))
+            db_session.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)"))
+
+        db_session.execute(text("UPDATE users SET subscription_plan = 'BASIC' WHERE subscription_plan IS NULL"))
+        db_session.commit()
+        logger.info("Users schema patch check completed.")
+    except Exception as patch_err:
+        db_session.rollback()
+        logger.warning("Users schema patch skipped/failed: %s", patch_err)
+
 # Ensure storage directories exist (skip on Cloud Run — ephemeral, uses /tmp/)
 _CLOUD_RUN = os.getenv("CLOUD_RUN", "").lower() in ("1", "true", "yes")
 if not _CLOUD_RUN:
@@ -56,6 +90,9 @@ async def lifespan(app: FastAPI):
         # Create tables if they don't exist (dev mode)
         logger.info("Ensuring database tables exist...")
         Base.metadata.create_all(bind=engine)
+
+        # Patch legacy schema drift (Cloud SQL instances created before new auth fields).
+        _ensure_users_schema(db)
         logger.info("Database tables ready.")
         
         db.close()
