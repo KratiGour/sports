@@ -364,6 +364,18 @@ export interface SubmissionDetail extends SubmissionSummary {
   key_frame_url?: string;
   ai_draft_text?: string;
   coach_final_text?: string;
+  detected_flaws?: Array<{
+    flaw_name: string;
+    description: string;
+    rating?: number;
+    timestamp?: string;
+  }>;
+  drill_recommendations?: Array<{
+    query: string;
+    title: string;
+    link: string;
+    reason: string;
+  }>;
 }
 
 export interface CoachListItem {
