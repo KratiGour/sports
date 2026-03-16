@@ -76,3 +76,5 @@ This opens an interactive window where you can draw a rectangle over the scorebo
 1. Verify ROI coordinates using `find_scoreboard_roi.py`
 2. Check if scoreboard text is clearly visible (no overlays/ads blocking it)
 3. Enable `--debug` mode to inspect extracted frames
+
+## Made for Cricket Fans, by Cricket Fans! 🏏❤️
