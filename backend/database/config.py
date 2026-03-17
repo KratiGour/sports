@@ -1,6 +1,7 @@
 import os
 import logging
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool, StaticPool
@@ -13,64 +14,89 @@ load_dotenv()
 
 # Database URL from environment variable
 DATABASE_URL = os.getenv("DATABASE_URL")
+LOCAL_SQLITE_URL = "sqlite:///./cricket_analytics.db"
+
+# Local/dev safety switch: when true, fallback to SQLite if Postgres init fails.
+ALLOW_SQLITE_FALLBACK = os.getenv("ALLOW_SQLITE_FALLBACK", "false").lower() in {"1", "true", "yes"}
+IS_CLOUD_RUN = os.getenv("K_SERVICE") is not None
 
 # Detect if running locally (SQLite) or in cloud (PostgreSQL)
 IS_SQLITE = not DATABASE_URL or DATABASE_URL.startswith("sqlite")
 
 if not DATABASE_URL:
     # Default to SQLite for local development without .env
-    DATABASE_URL = "sqlite:///./cricket_analytics.db"
+    DATABASE_URL = LOCAL_SQLITE_URL
     logger.warning("DATABASE_URL not set. Using local SQLite database.")
 
 # Handle Render's postgres:// URL format (needs postgresql://)
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Create engine based on database type
-if IS_SQLITE:
-    # SQLite config - simpler settings
-    engine = create_engine(
-        DATABASE_URL,
+def _build_sqlite_engines(url: str):
+    sqlite_engine = create_engine(
+        url,
         poolclass=StaticPool,
         connect_args={"check_same_thread": False},
     )
-    background_engine = engine  # Use same engine for SQLite
-else:
-    # PostgreSQL config with connection pooling optimizations
-    engine = create_engine(
-        DATABASE_URL,
-        poolclass=QueuePool,
-        pool_pre_ping=True,       # Test connections before use
-        pool_recycle=1800,        # Recycle connections every 30 minutes
-        pool_size=5,              # Keep pool small for serverless
-        max_overflow=10,          # Allow overflow connections
-        pool_timeout=30,          # Wait 30s for a connection
-        connect_args={
-            'connect_timeout': 10,
-            'keepalives': 1,
-            'keepalives_idle': 30,
-            'keepalives_interval': 10,
-            'keepalives_count': 5,
-        }
-    )
+    return sqlite_engine, sqlite_engine
 
-    # Separate engine for background tasks (OCR processing)
-    background_engine = create_engine(
-        DATABASE_URL,
+
+def _build_postgres_engines(url: str):
+    primary = create_engine(
+        url,
         poolclass=QueuePool,
         pool_pre_ping=True,
         pool_recycle=1800,
-        pool_size=2,              # Minimal for background tasks
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        connect_args={
+            "connect_timeout": 10,
+            "keepalives": 1,
+            "keepalives_idle": 30,
+            "keepalives_interval": 10,
+            "keepalives_count": 5,
+        },
+    )
+
+    background = create_engine(
+        url,
+        poolclass=QueuePool,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+        pool_size=2,
         max_overflow=3,
         pool_timeout=60,
         connect_args={
-            'connect_timeout': 30,
-            'keepalives': 1,
-            'keepalives_idle': 60,
-            'keepalives_interval': 15,
-            'keepalives_count': 5,
-        }
+            "connect_timeout": 30,
+            "keepalives": 1,
+            "keepalives_idle": 60,
+            "keepalives_interval": 15,
+            "keepalives_count": 5,
+        },
     )
+    return primary, background
+
+
+# Create engine(s) with safe local fallback.
+if IS_SQLITE:
+    engine, background_engine = _build_sqlite_engines(DATABASE_URL)
+else:
+    engine, background_engine = _build_postgres_engines(DATABASE_URL)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except SQLAlchemyError as db_err:
+        if ALLOW_SQLITE_FALLBACK and not IS_CLOUD_RUN:
+            logger.warning(
+                "Primary PostgreSQL unavailable (%s). Falling back to local SQLite for development.",
+                db_err,
+            )
+            DATABASE_URL = LOCAL_SQLITE_URL
+            IS_SQLITE = True
+            engine, background_engine = _build_sqlite_engines(DATABASE_URL)
+        else:
+            raise
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 BackgroundSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=background_engine)
