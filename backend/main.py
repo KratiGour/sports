@@ -55,6 +55,35 @@ def _ensure_users_schema(db_session) -> None:
         db_session.rollback()
         logger.warning("Users schema patch skipped/failed: %s", patch_err)
 
+
+def _ensure_videos_schema(db_session) -> None:
+    """Patch legacy videos schema for large file uploads."""
+    try:
+        dialect = db_session.bind.dialect.name if db_session.bind is not None else ""
+        if dialect != "sqlite":
+            # Prevent overflow for files larger than 2GB.
+            db_session.execute(text("ALTER TABLE videos ALTER COLUMN file_size_bytes TYPE BIGINT"))
+            db_session.commit()
+            logger.info("Videos schema patch check completed.")
+    except Exception as patch_err:
+        db_session.rollback()
+        logger.warning("Videos schema patch skipped/failed: %s", patch_err)
+
+
+def _ensure_submission_status_enum(db_session) -> None:
+    """Ensure legacy PostgreSQL enum includes UPLOADING status value."""
+    try:
+        dialect = db_session.bind.dialect.name if db_session.bind is not None else ""
+        if dialect != "sqlite":
+            db_session.execute(
+                text("ALTER TYPE submissionstatus ADD VALUE IF NOT EXISTS 'UPLOADING'")
+            )
+            db_session.commit()
+            logger.info("Submission status enum patch check completed.")
+    except Exception as patch_err:
+        db_session.rollback()
+        logger.warning("Submission status enum patch skipped/failed: %s", patch_err)
+
 # Ensure storage directories exist (skip on Cloud Run — ephemeral, uses /tmp/)
 _CLOUD_RUN = os.getenv("CLOUD_RUN", "").lower() in ("1", "true", "yes")
 if not _CLOUD_RUN:
@@ -93,6 +122,8 @@ async def lifespan(app: FastAPI):
 
         # Patch legacy schema drift (Cloud SQL instances created before new auth fields).
         _ensure_users_schema(db)
+        _ensure_videos_schema(db)
+        _ensure_submission_status_enum(db)
         logger.info("Database tables ready.")
         
         db.close()
