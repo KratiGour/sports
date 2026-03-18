@@ -54,6 +54,7 @@ def queue_processing_task(
     submission_id: str,
     blob_name: str,
     *,
+    pipeline: str = "submission_analysis",
     deadline_seconds: int = 600,
 ) -> Optional[str]:
     """
@@ -78,7 +79,11 @@ def queue_processing_task(
     worker_url = f"{WORKER_SERVICE_URL.rstrip('/')}/internal/worker/process-video"
 
     payload = json.dumps(
-        {"submission_id": submission_id, "blob_name": blob_name}
+        {
+            "submission_id": submission_id,
+            "blob_name": blob_name,
+            "pipeline": pipeline,
+        }
     ).encode("utf-8")
 
     # Build the HTTP request inside the task
