@@ -1,22 +1,22 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import cricketBatting from '../gallery/WhatsApp Image 2026-03-16 at 2.05.37 PM.jpeg';
-import cricketFielding from '../gallery/WhatsApp Image 2026-03-15 at 5.49.32 PM.jpeg';
-import cricketAction from '../gallery/WhatsApp Image 2026-03-15 at 5.49.33 PM.jpeg';
-import appLogo from '../gallery/logo.png';
-import actionDetectionIcon from '../gallery/icons/action detection .jpeg';
-import techniqueAnalysisIcon from '../gallery/icons/Technique Analysis.jpeg';
-import smartRecommendationIcon from '../gallery/icons/Smart Recomendation  (2).jpeg';
-import performanceMetricsIcon from '../gallery/icons/Performance Metrices.jpeg';
-import autoHighlightIcon from '../gallery/icons/AutoHighlight Generation .jpeg';
-import noTimeIcon from '../gallery/icons/No Time For Video Analysis.jpeg';
-import expensiveToolsIcon from '../gallery/icons/Expensive tools .jpeg';
-import complexToUseIcon from '../gallery/icons/complex to use.jpeg';
-import uploadVideoIcon from '../gallery/icons/Upload Video .jpeg';
-import coachReviewIcon from '../gallery/icons/Coach Review.jpeg';
-import reviewTimelineIcon from '../gallery/icons/Review Timeline .jpeg';
-import getInsightsIcon from '../gallery/icons/Get insights .jpeg';
+import cricketBatting from '../gallery/WhatsApp Image 2026-03-16 at 2.05.37 PM.webp';
+import cricketFielding from '../gallery/WhatsApp Image 2026-03-15 at 5.49.32 PM.webp';
+import cricketAction from '../gallery/WhatsApp Image 2026-03-15 at 5.49.33 PM.webp';
+import appLogo from '../gallery/logo.webp';
+import actionDetectionIcon from '../gallery/icons/action detection .webp';
+import techniqueAnalysisIcon from '../gallery/icons/Technique Analysis.webp';
+import smartRecommendationIcon from '../gallery/icons/Smart Recomendation  (2).webp';
+import performanceMetricsIcon from '../gallery/icons/Performance Metrices.webp';
+import autoHighlightIcon from '../gallery/icons/AutoHighlight Generation .webp';
+import noTimeIcon from '../gallery/icons/No Time For Video Analysis.webp';
+import expensiveToolsIcon from '../gallery/icons/Expensive tools .webp';
+import complexToUseIcon from '../gallery/icons/complex to use.webp';
+import uploadVideoIcon from '../gallery/icons/Upload Video .webp';
+import coachReviewIcon from '../gallery/icons/Coach Review.webp';
+import reviewTimelineIcon from '../gallery/icons/Review Timeline .webp';
+import getInsightsIcon from '../gallery/icons/Get insights .webp';
 
 const translations: Record<string, Record<string, string>> = {
   en: {
