@@ -28,6 +28,7 @@ import CoachReviewPage from './pages/CoachReviewPage';
 import SubscriptionPage from './pages/SubscriptionPage';
 import CoachPendingPage from './pages/CoachPendingPage';
 import CoachVerificationPage from './pages/CoachVerificationPage';
+import FeaturesDetailPage from './pages/FeaturesDetailPage';
 
 // Auth Initializer (runs once on module load) 
 let authInitialized = false;
@@ -140,6 +141,7 @@ export default function AppRouter() {
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/coach-pending" element={<CoachPendingPage />} />
+        <Route path="/features-detail" element={<FeaturesDetailPage />} />
 
         {/* Guest only */}
         <Route element={<GuestRoute />}>
