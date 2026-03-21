@@ -10,6 +10,7 @@ Usage:
 """
 
 import cv2
+import numpy as np
 import re
 import csv
 import json
@@ -18,7 +19,7 @@ import argparse
 import subprocess
 
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import Iterator, List, Dict, Optional, Tuple
 from collections import deque
 
 try:
@@ -1520,6 +1521,181 @@ def process_video(video_path: str, config: ScoreboardConfig, sample_interval: fl
     if stats['fail'] > processed * 0.5:
         logger.warning("⚠️ High OCR failure rate. Run with --visualize to check ROI.")
 
+    return events
+
+
+def _iter_ffmpeg_sampled_frames(
+    video_source: str,
+    *,
+    sample_interval: float,
+    start_time: float = 0.0,
+    max_frames: Optional[int] = None,
+) -> Iterator[Tuple[int, float, np.ndarray]]:
+    """Yield sampled frames by streaming from FFmpeg over image2pipe MJPEG.
+
+    This avoids downloading the full source video to disk/RAM first.
+    """
+    if sample_interval <= 0:
+        raise ValueError("sample_interval must be > 0")
+
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
+    if start_time > 0:
+        cmd.extend(["-ss", str(start_time)])
+    cmd.extend(
+        [
+            "-i",
+            video_source,
+            "-vf",
+            f"fps=1/{sample_interval}",
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "mjpeg",
+            "-q:v",
+            "3",
+            "-",
+        ]
+    )
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=1024 * 1024,
+    )
+
+    if proc.stdout is None:
+        proc.kill()
+        raise RuntimeError("FFmpeg pipe failed to initialize")
+
+    buffer = bytearray()
+    frame_index = 0
+    soi = b"\xff\xd8"
+    eoi = b"\xff\xd9"
+
+    try:
+        while True:
+            chunk = proc.stdout.read(256 * 1024)
+            if not chunk:
+                break
+            buffer.extend(chunk)
+
+            while True:
+                start = buffer.find(soi)
+                if start < 0:
+                    break
+                end = buffer.find(eoi, start + 2)
+                if end < 0:
+                    break
+
+                jpg = bytes(buffer[start : end + 2])
+                del buffer[: end + 2]
+
+                frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                if frame is None:
+                    continue
+
+                timestamp = start_time + (frame_index * sample_interval)
+                yield frame_index, timestamp, frame
+                frame_index += 1
+
+                if max_frames and frame_index >= max_frames:
+                    proc.kill()
+                    return
+
+        proc.wait(timeout=30)
+        if proc.returncode not in (0, None):
+            stderr = (proc.stderr.read().decode("utf-8", errors="ignore") if proc.stderr else "").strip()
+            raise RuntimeError(f"FFmpeg stream failed: {stderr or 'unknown ffmpeg error'}")
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
+def process_video_streaming(
+    video_source: str,
+    config: ScoreboardConfig,
+    sample_interval: float = 1.0,
+    max_frames: Optional[int] = None,
+    min_confidence: float = 0.4,
+) -> List[Dict]:
+    """Process a remote/local source by streaming sampled frames via FFmpeg.
+
+    Intended for very large videos where full download to /tmp is not safe.
+    """
+    logger.info("=" * 60)
+    logger.info("🏏 CRICKET HIGHLIGHT DETECTION (STREAMING)")
+    logger.info("=" * 60)
+
+    reader = OCRScoreReader(config, use_gpu=config.use_gpu)
+    detector = EventDetector()
+    events: List[Dict] = []
+
+    stats = {"success": 0, "fail": 0, "low_conf": 0}
+    last_valid_score: Optional[ScoreState] = None
+    candidate_score: Optional[ScoreState] = None
+    candidate_count = 0
+
+    logger.info("Source: %s", video_source)
+    logger.info("Sampling: every %.2fs", sample_interval)
+    logger.info("Confidence threshold: %.2f", min_confidence)
+
+    processed = 0
+    for _, timestamp, frame in _iter_ffmpeg_sampled_frames(
+        video_source,
+        sample_interval=sample_interval,
+        start_time=float(config.start_time or 0.0),
+        max_frames=max_frames,
+    ):
+        processed += 1
+
+        prev_wickets = detector.get_last_wickets()
+        roi = reader.extract_score_roi(frame, None)
+        score, conf, _ = (None, 0.0, "<no ROI>") if roi is None else reader.read_score(
+            roi,
+            min_confidence,
+            prev_wickets,
+        )
+
+        if score is None and 0 < conf < min_confidence:
+            stats["low_conf"] += 1
+
+        overs_roi = reader.extract_overs_roi(frame, None)
+        overs = reader.read_overs(overs_roi) if overs_roi is not None else None
+
+        if score:
+            stats["success"] += 1
+            last_valid_score = score
+        else:
+            stats["fail"] += 1
+            score = last_valid_score
+
+        if score:
+            if candidate_score == score:
+                candidate_count += 1
+                if candidate_count >= 2:
+                    event = detector.detect(score, timestamp, overs)
+                    if event:
+                        events.append(event)
+            else:
+                candidate_score, candidate_count = score, 1
+
+        if processed % 100 == 0:
+            success_rate = stats["success"] / max(processed, 1) * 100
+            logger.info(
+                "Progress: %s frames | OCR %.0f%% | Events %s",
+                processed,
+                success_rate,
+                len(events),
+            )
+
+    total = max(processed, 1)
+    logger.info("-" * 60)
+    logger.info("✅ Streaming analysis complete: %s frames", processed)
+    logger.info("   OCR Success: %s (%.1f%%)", stats["success"], stats["success"] / total * 100)
+    logger.info("   OCR Failures: %s (%.1f%%)", stats["fail"], stats["fail"] / total * 100)
+    logger.info("   Low Confidence: %s (%.1f%%)", stats["low_conf"], stats["low_conf"] / total * 100)
+    logger.info("   Events detected: %s", len(events))
     return events
 
 
