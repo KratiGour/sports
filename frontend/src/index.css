@@ -4,6 +4,11 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --primary-gradient: linear-gradient(to right, #3b82f6, #9333ea);
+  --primary-gradient-hover: linear-gradient(to right, #2563eb, #7e22ce);
+}
+
 html,
 body {
   height: 100%;
