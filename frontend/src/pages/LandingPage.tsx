@@ -1,22 +1,16 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import cricketBatting from '../gallery/WhatsApp Image 2026-03-16 at 2.05.37 PM.webp';
-import cricketFielding from '../gallery/WhatsApp Image 2026-03-15 at 5.49.32 PM.webp';
-import cricketAction from '../gallery/WhatsApp Image 2026-03-15 at 5.49.33 PM.webp';
+import {
+  Clock, Wrench, Puzzle,
+  Crosshair, Brain, Lightbulb, BarChart2, Film,
+  Upload, UserCheck, List, TrendingUp,
+  Facebook, Twitter, Instagram, Youtube
+} from 'lucide-react';
+import cricketBatting from '../gallery/batting-action.webp';
+import cricketFielding from '../gallery/bat-ball.webp';
+import cricketAction from '../gallery/cricket-pitch.webp';
 import appLogo from '../gallery/logo.webp';
-import actionDetectionIcon from '../gallery/icons/action detection .webp';
-import techniqueAnalysisIcon from '../gallery/icons/Technique Analysis.webp';
-import smartRecommendationIcon from '../gallery/icons/Smart Recomendation  (2).webp';
-import performanceMetricsIcon from '../gallery/icons/Performance Metrices.webp';
-import autoHighlightIcon from '../gallery/icons/AutoHighlight Generation .webp';
-import noTimeIcon from '../gallery/icons/No Time For Video Analysis.webp';
-import expensiveToolsIcon from '../gallery/icons/Expensive tools .webp';
-import complexToUseIcon from '../gallery/icons/complex to use.webp';
-import uploadVideoIcon from '../gallery/icons/Upload Video .webp';
-import coachReviewIcon from '../gallery/icons/Coach Review.webp';
-import reviewTimelineIcon from '../gallery/icons/Review Timeline .webp';
-import getInsightsIcon from '../gallery/icons/Get insights .webp';
 
 const translations: Record<string, Record<string, string>> = {
   en: {
@@ -29,7 +23,7 @@ const translations: Record<string, Record<string, string>> = {
     uploadYour: 'Upload.',
     cricketVideo: 'Get coached.',
     getCoach: 'Improve.',
-    description: 'CricIQ let\'s you create, edit and share clips from any online video (YouTube, Twitch, ...)',
+    description: 'CricIQ lets you create, edit and share clips from any online video (YouTube, Twitch, ...)',
     registerBtn: 'REGISTER NOW FOR FREE',
     watchDemo: '▶ WATCH DEMO',
     heroDescription: 'CricIQ analyzes your bowling, batting and fielding videos to provide detailed performance insights, technique improvements, and match highlights- helping cricketers at all levels improve faster.',
@@ -43,7 +37,7 @@ const translations: Record<string, Record<string, string>> = {
     avgImprovement: 'Average Improvement',
     timesSaved: 'Hours Saved Per Week',
     coachesTransformed: 'Coaches Transformed',
-    createEdit: 'CricIQ let\'s you create, edit and share clips from any online video (YouTube, Twitch, ...)',
+    createEdit: 'CricIQ lets you create, edit and share clips from any online video (YouTube, Twitch, ...)',
     withEase: 'with ease. Perfect for scouting and analysis.',
     coaches: 'COACHES',
     clips: 'CLIPS',
@@ -486,7 +480,7 @@ export default function LandingPage() {
                 <Link to="/login" className="text-gray-300 hover:text-white transition text-sm font-medium border-b-2 border-slate-600 pb-1 hover:border-purple-500">{t.login}</Link>
               </motion.div>
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Link to="/register" className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold text-sm rounded transition shadow-lg hover:shadow-xl">{t.register}</Link>
+                <Link to="/register" className="px-4 py-2 bg-[image:var(--primary-gradient)] hover:opacity-90 text-white font-bold text-sm rounded transition shadow-lg hover:shadow-xl">{t.register}</Link>
               </motion.div>
             </div>
           </div>
@@ -524,24 +518,21 @@ export default function LandingPage() {
                 <span className="text-sm text-gray-300">Trusted by 1500+ coaches worldwide</span>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="relative"
-                >
-                  <Link to="/register" className="px-6 sm:px-8 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold text-xs sm:text-sm rounded transition text-center shadow-lg hover:shadow-xl relative overflow-hidden group">
-                    <span className="relative z-10">{t.registerBtn}</span>
-                    <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
-                  </Link>
-                  <motion.div 
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full"
-                  >
+              <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 mb-8">
+                <div className="flex flex-col items-start gap-1">
+                  <span className="inline-flex items-center gap-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                     ⚡ {t.limitedOffer}
+                  </span>
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Link to="/register" className="px-6 sm:px-8 py-2 sm:py-3 bg-[image:var(--primary-gradient)] hover:opacity-90 text-white font-bold text-xs sm:text-sm rounded transition text-center shadow-lg hover:shadow-xl relative overflow-hidden group block">
+                      <span className="relative z-10">{t.registerBtn}</span>
+                      <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
+                    </Link>
                   </motion.div>
-                </motion.div>
+                </div>
                 <motion.button 
                   onClick={() => setShowDemoModal(true)}
                   whileHover={{ scale: 1.05 }}
@@ -568,7 +559,7 @@ export default function LandingPage() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="relative hidden lg:block"
             >
-              <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border-8 border-black hover:shadow-purple-500/50 transition-shadow duration-300" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
+              <div className="rounded-2xl overflow-hidden border-4 border-slate-700" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
                 <img
                   src={cricketBatting}
                   alt="Cricket batting"
@@ -577,14 +568,14 @@ export default function LandingPage() {
               </div>
 
               <div className="mt-4 flex gap-4">
-                <div className="flex-1 bg-white rounded-lg shadow-lg border-4 border-black h-24 overflow-hidden hover:shadow-purple-500/30 transition-shadow duration-300" style={{ boxShadow: '0 0 20px rgba(168, 85, 247, 0.2)' }}>
+                <div className="flex-1 rounded-2xl overflow-hidden border-4 border-slate-700 h-24" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
                   <img
                     src={cricketFielding}
                     alt="Cricket fielding"
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <div className="flex-1 bg-white rounded-lg shadow-lg border-4 border-black h-24 overflow-hidden hover:shadow-purple-500/30 transition-shadow duration-300" style={{ boxShadow: '0 0 20px rgba(168, 85, 247, 0.2)' }}>
+                <div className="flex-1 rounded-2xl overflow-hidden border-4 border-slate-700 h-24" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
                   <img
                     src={cricketAction}
                     alt="Cricket action"
@@ -612,7 +603,7 @@ export default function LandingPage() {
               viewport={{ once: true }}
             >
               <p className="text-lg text-gray-300">
-                <span className="font-semibold text-white">CricIQ</span> {t.createEdit}
+                {t.createEdit}
               </p>
               <p className="text-lg text-gray-300 mt-2">
                 {t.withEase}
@@ -682,18 +673,18 @@ export default function LandingPage() {
           <div className="space-y-8">
             {[
               {
-                icon: noTimeIcon,
+                icon: Clock,
                 title: 'No time for video analysis?',
                 desc: 'As an amateur coach, you know your time is gold. Preparing video analysis would mean sacrificing valuable hours of technical and tactical training.',
                 cta: 'OPTIMIZE YOUR TIME'
               },
               {
-                icon: expensiveToolsIcon,
+                icon: Wrench,
                 title: 'Expensive tools?',
                 desc: 'Professional video analysis software costs thousands. CricIQ provides enterprise-level analysis at a fraction of the cost.'
               },
               {
-                icon: complexToUseIcon,
+                icon: Puzzle,
                 title: 'Complex to use?',
                 desc: 'Most tools require technical expertise. Our platform is intuitive and designed for coaches, not tech experts.'
               }
@@ -707,8 +698,8 @@ export default function LandingPage() {
                 className="bg-slate-800/50 border border-slate-700 rounded-lg p-8 hover:border-purple-500 hover:bg-slate-800/70 transition-all duration-300"
               >
                 <div className="flex items-start gap-4">
-                  <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <img src={problem.icon} alt={problem.title} className="w-10 h-10 object-contain" />
+                  <div className="w-16 h-16 bg-[image:var(--primary-gradient)] rounded-full flex items-center justify-center flex-shrink-0">
+                    <problem.icon className="w-8 h-8 text-white" />
                   </div>
                   <div className="flex-1">
                     <h3 className="text-2xl font-bold text-white mb-3">{problem.title}</h3>
@@ -745,27 +736,27 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                icon: actionDetectionIcon,
+                icon: Crosshair,
                 title: 'Action Detection',
                 desc: 'Automatically detect batting, bowling, and fielding actions with 98% accuracy using advanced machine learning'
               },
               {
-                icon: techniqueAnalysisIcon,
+                icon: Brain,
                 title: 'Technique Analysis',
                 desc: 'Analyzes your technique with 94% accuracy and provides detailed biomechanical insights for improvement'
               },
               {
-                icon: smartRecommendationIcon,
+                icon: Lightbulb,
                 title: 'Smart Recommendations',
                 desc: 'Get personalized coaching recommendations based on performance analysis'
               },
               {
-                icon: performanceMetricsIcon,
+                icon: BarChart2,
                 title: 'Performance Metrics',
                 desc: 'Generates comprehensive performance metrics and trends for continuous improvement'
               },
               {
-                icon: autoHighlightIcon,
+                icon: Film,
                 title: 'Auto Highlight Generation',
                 desc: 'Automatically create highlight reels from your videos using intelligent scene detection'
               }
@@ -780,9 +771,9 @@ export default function LandingPage() {
               >
                 <motion.div 
                   whileHover={{ scale: 1.1 }}
-                  className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4 mx-auto group-hover:shadow-lg group-hover:shadow-purple-500/50 transition-all duration-300"
+                  className="w-20 h-20 bg-[image:var(--primary-gradient)] rounded-full flex items-center justify-center mb-4 mx-auto group-hover:shadow-lg group-hover:shadow-purple-500/50 transition-all duration-300"
                 >
-                  <img src={feature.icon} alt={feature.title} className="w-12 h-12 object-contain" />
+                  <feature.icon className="w-10 h-10 text-white" />
                 </motion.div>
                 <h3 className="text-xl font-bold text-white mb-2">{feature.title}</h3>
                 <p className="text-gray-300">{feature.desc}</p>
@@ -880,10 +871,10 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-4 gap-6">
             {[
-              { icon: uploadVideoIcon, title: 'Upload Video', desc: 'Upload your cricket session video' },
-              { icon: coachReviewIcon, title: 'Coach Reviews', desc: 'Get instant highlights & key moments' },
-              { icon: reviewTimelineIcon, title: 'Review Timeline', desc: 'Browse clips with timestamps' },
-              { icon: getInsightsIcon, title: 'Get Insights', desc: 'Receive feedback & performance summary' }
+              { icon: Upload, title: 'Upload Video', desc: 'Upload your cricket session video' },
+              { icon: UserCheck, title: 'Coach Reviews', desc: 'Get instant highlights & key moments' },
+              { icon: List, title: 'Review Timeline', desc: 'Browse clips with timestamps' },
+              { icon: TrendingUp, title: 'Get Insights', desc: 'Receive feedback & performance summary' }
             ].map((item, i) => (
               <motion.div
                 key={i}
@@ -895,9 +886,9 @@ export default function LandingPage() {
               >
                 <motion.div 
                   whileHover={{ scale: 1.1, y: -5 }}
-                  className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-purple-500/50 transition-all duration-300"
+                  className="w-20 h-20 bg-[image:var(--primary-gradient)] rounded-full flex items-center justify-center mx-auto mb-4 group-hover:shadow-lg group-hover:shadow-purple-500/50 transition-all duration-300"
                 >
-                  <img src={item.icon} alt={item.title} className="w-12 h-12 object-contain" />
+                  <item.icon className="w-10 h-10 text-white" />
                 </motion.div>
                 <h3 className="text-lg font-bold text-white mb-2">{item.title}</h3>
                 <p className="text-gray-300 text-sm">{item.desc}</p>
@@ -938,54 +929,92 @@ export default function LandingPage() {
         </div>
       )}
 
-            {/* Testimonials Section */}
-      <section id="testimonials" className="py-20 px-4 bg-slate-800/50">
+      {/* Testimonials Section */}
+      <section id="testimonials" className="py-20 px-4 bg-slate-800/50 relative">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500 to-transparent"></div>
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-black text-white text-center mb-4">
-            Trusted by Real Coaches
-          </h2>
-          <p className="text-lg text-gray-300 text-center mb-16">
-            See how professional coaches across different sports use CricIQ to improve their teams
-          </p>
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4">{t.successStories}</h2>
+            <p className="text-xl text-gray-300 max-w-3xl mx-auto">{t.coachesImproving}</p>
+            <p className="text-lg text-gray-400 mt-2">{t.successDesc}</p>
+          </motion.div>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
             {[
               {
                 quote: "It's an agile, dynamic, and adaptable tool that allows me to cut my videos from any device.",
-                author: 'Antonio Crespo',
-                sport: 'Futsal',
+                name: 'Antonio Crespo',
+                role: 'Futsal Coach',
                 team: 'Dehesa Villalba',
-                experience: '20 years coaching'
+                experience: '20 years coaching',
+                improvement: '34%',
+                metric: 'Player Performance'
               },
               {
-                quote: 'Create video clips without wasting too much time.',
-                author: 'Roberto Sánchez',
-                sport: 'Basketball',
-                team: 'Basket Cervantes',
-                experience: '22 years coaching'
+                quote: 'CricIQ cut my analysis time by 80%. Now I focus on coaching, not editing.',
+                name: 'Rajesh Kumar',
+                role: 'Cricket Coach',
+                team: 'Delhi Youth Academy',
+                experience: '15 years coaching',
+                improvement: '28%',
+                metric: 'Batting Accuracy'
+              },
+              {
+                quote: 'Best investment for our academy. The ROI is immediate and measurable.',
+                name: 'Amit Patel',
+                role: 'Head Coach',
+                team: 'Bangalore Sports Academy',
+                experience: '12 years coaching',
+                improvement: '42%',
+                metric: 'Team Consistency'
               }
-            ].map((testimonial, i) => (
+            ].map((t2, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="bg-slate-700/50 border border-slate-600 rounded-lg p-8 hover:border-purple-500 transition"
+                transition={{ delay: i * 0.1, duration: 0.6 }}
+                viewport={{ once: true }}
+                className="bg-slate-700/50 border border-slate-600 rounded-lg p-8 hover:border-purple-500 hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300"
               >
-                <p className="text-gray-300 mb-6 italic text-lg">\"{ testimonial.quote }\"</p>
-                <div className="border-t border-slate-600 pt-4">
-                  <p className="text-white font-bold text-lg">{testimonial.author}</p>
-                  <p className="text-purple-400 font-semibold">{testimonial.sport}</p>
-                  <p className="text-gray-400 text-sm">{testimonial.team}</p>
-                  <p className="text-gray-500 text-sm">• {testimonial.experience}</p>
+                <p className="text-gray-300 mb-6 italic text-sm">"{t2.quote}"</p>
+                <div className="border-t border-slate-600 pt-4 mb-4">
+                  <p className="text-white font-bold">{t2.name}</p>
+                  <p className="text-purple-400 font-semibold text-sm">{t2.role}</p>
+                  <p className="text-gray-400 text-xs">{t2.team} • {t2.experience}</p>
+                </div>
+                <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg p-3 border border-purple-500/30 text-center">
+                  <div className="text-2xl font-black bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">{t2.improvement}</div>
+                  <p className="text-gray-300 text-xs font-semibold mt-0.5">{t2.metric}</p>
                 </div>
               </motion.div>
             ))}
           </div>
-          <div className="text-center mt-8">
-            <Link to="/testimonials" className="px-6 py-2 border-2 border-purple-500 text-purple-400 hover:bg-purple-500/10 font-bold rounded transition inline-block">
-              Read More →
-            </Link>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              { value: '1,247', label: t.coachesTransformed },
+              { value: '15.2K', label: t.timesSaved },
+              { value: '31%',   label: t.avgImprovement }
+            ].map((metric, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, scale: 0.8 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                transition={{ delay: i * 0.1, duration: 0.6 }}
+                viewport={{ once: true }}
+                className="bg-slate-800/50 border border-slate-600 rounded-lg p-6 text-center hover:border-purple-500 transition-all duration-300"
+              >
+                <div className="text-3xl font-black bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent mb-1">{metric.value}</div>
+                <p className="text-gray-300 font-semibold text-sm">{metric.label}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
@@ -1004,7 +1033,7 @@ export default function LandingPage() {
             <p className="text-gray-300 text-lg mb-8">
               Simple, transparent pricing designed for coaches with real budgets
             </p>
-            <Link to="/register" className="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold text-lg rounded transition inline-block">
+            <Link to="/register" className="px-8 py-3 bg-[image:var(--primary-gradient)] hover:opacity-90 text-white font-bold text-lg rounded transition inline-block">
               View Pricing Plans
             </Link>
           </div>
@@ -1012,120 +1041,6 @@ export default function LandingPage() {
             <Link to="/pricing" className="px-6 py-2 border-2 border-purple-500 text-purple-400 hover:bg-purple-500/10 font-bold rounded transition inline-block">
               View All Plans →
             </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Success Stories Section */}
-      <section className="py-20 px-4 bg-slate-900 relative">
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500 to-transparent"></div>
-        
-        <div className="max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl md:text-5xl font-black text-white mb-4">
-              {t.successStories}
-            </h2>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-              {t.coachesImproving}
-            </p>
-            <p className="text-lg text-gray-400 mt-2">
-              {t.successDesc}
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-8 mb-12">
-            {[
-              {
-                name: 'Rajesh Kumar',
-                role: 'Cricket Coach',
-                team: 'Delhi Youth Academy',
-                improvement: '34%',
-                metric: 'Player Performance',
-                quote: 'CricIQ cut my analysis time by 80%. Now I focus on coaching, not editing.',
-                image: '🏐'
-              },
-              {
-                name: 'Priya Sharma',
-                role: 'Batting Coach',
-                team: 'Mumbai Cricket Club',
-                improvement: '28%',
-                metric: 'Batting Accuracy',
-                quote: 'The technique analysis is incredibly accurate. My players improved faster than ever.',
-                image: '⚾'
-              },
-              {
-                name: 'Amit Patel',
-                role: 'Head Coach',
-                team: 'Bangalore Sports Academy',
-                improvement: '42%',
-                metric: 'Team Consistency',
-                quote: 'Best investment for our academy. The ROI is immediate and measurable.',
-                image: '🎯'
-              }
-            ].map((story, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1, duration: 0.6 }}
-                viewport={{ once: true }}
-                className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-600 rounded-lg p-8 hover:border-purple-500 hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300 group"
-              >
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">
-                    {story.image}
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white">{story.name}</h3>
-                    <p className="text-purple-400 font-semibold text-sm">{story.role}</p>
-                    <p className="text-gray-400 text-xs">{story.team}</p>
-                  </div>
-                </div>
-                
-                <div className="mb-6 p-4 bg-slate-900/50 rounded-lg border border-slate-600">
-                  <p className="text-gray-300 italic text-sm">\"{ story.quote }\"</p>
-                </div>
-
-                <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg p-4 border border-purple-500/30">
-                  <div className="text-center">
-                    <div className="text-3xl font-black bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                      {story.improvement}
-                    </div>
-                    <p className="text-gray-300 text-sm font-semibold mt-1">{story.metric}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Success Metrics */}
-          <div className="grid md:grid-cols-3 gap-6 mb-12">
-            {[
-              { icon: '📊', value: '1,247', label: t.coachesTransformed },
-              { icon: '⏱️', value: '15.2K', label: t.timesSaved },
-              { icon: '🎯', value: '31%', label: t.avgImprovement }
-            ].map((metric, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, scale: 0.8 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.1, duration: 0.6 }}
-                viewport={{ once: true }}
-                className="bg-slate-800/50 border border-slate-600 rounded-lg p-6 text-center hover:border-purple-500 transition-all duration-300"
-              >
-                <div className="text-4xl mb-3">{metric.icon}</div>
-                <div className="text-3xl font-black bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent mb-2">
-                  {metric.value}
-                </div>
-                <p className="text-gray-300 font-semibold">{metric.label}</p>
-              </motion.div>
-            ))}
           </div>
         </div>
       </section>
@@ -1152,23 +1067,20 @@ export default function LandingPage() {
             </p>
           </motion.div>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="relative"
-            >
-              <Link to="/register" className="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold rounded transition shadow-lg hover:shadow-xl block">
-                {t.joinNow}
-              </Link>
-              <motion.div
-                animate={{ scale: [1, 1.15, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full"
-              >
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 justify-center">
+            <div className="flex flex-col items-center gap-1">
+              <span className="inline-flex items-center gap-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                 🔥 Only 23 left
+              </span>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Link to="/register" className="px-8 py-3 bg-[image:var(--primary-gradient)] hover:opacity-90 text-white font-bold rounded transition shadow-lg hover:shadow-xl block">
+                  {t.joinNow}
+                </Link>
               </motion.div>
-            </motion.div>
+            </div>
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -1220,7 +1132,7 @@ export default function LandingPage() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               type="submit"
-              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold rounded transition"
+              className="px-6 py-3 bg-[image:var(--primary-gradient)] hover:opacity-90 text-white font-bold rounded transition"
             >
               Subscribe
             </motion.button>
@@ -1335,7 +1247,7 @@ export default function LandingPage() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Link to="/register" className="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold rounded transition inline-block">
+              <Link to="/register" className="px-8 py-3 bg-[image:var(--primary-gradient)] hover:opacity-90 text-white font-bold rounded transition inline-block">
                 Start Your Free Trial
               </Link>
             </motion.div>
@@ -1433,7 +1345,7 @@ export default function LandingPage() {
                 </div>
                 <span className="text-xl font-bold text-white">CricIQ</span>
               </div>
-              <Link to="/register" className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold rounded transition inline-block">
+              <Link to="/register" className="px-6 py-2 bg-[image:var(--primary-gradient)] hover:opacity-90 text-white font-bold rounded transition inline-block">
                 REGISTER NOW FOR FREE
               </Link>
             </div>
@@ -1463,17 +1375,17 @@ export default function LandingPage() {
             <div>
               <h4 className="text-white font-bold mb-4">Follow Us</h4>
               <div className="flex gap-4">
-                <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-blue-400 transition text-2xl">
-                  <span>f</span>
+                <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-blue-400 transition" aria-label="Facebook">
+                  <Facebook className="w-5 h-5" />
                 </a>
-                <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-blue-400 transition text-2xl">
-                  𝕏
+                <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-sky-400 transition" aria-label="Twitter">
+                  <Twitter className="w-5 h-5" />
                 </a>
-                <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-pink-400 transition text-2xl">
-                  📷
+                <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-pink-400 transition" aria-label="Instagram">
+                  <Instagram className="w-5 h-5" />
                 </a>
-                <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-red-400 transition text-2xl">
-                  ▶
+                <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-red-400 transition" aria-label="YouTube">
+                  <Youtube className="w-5 h-5" />
                 </a>
               </div>
             </div>
@@ -1488,7 +1400,7 @@ export default function LandingPage() {
                 <a href="#" className="hover:text-white transition">Terms of Service</a>
               </div>
               <div className="text-gray-400 text-sm">
-                Copyright © CricIQ 2024
+                Copyright © CricIQ {new Date().getFullYear()}
               </div>
             </div>
           </div>
@@ -1501,7 +1413,7 @@ export default function LandingPage() {
         animate={{ opacity: showScrollTop ? 1 : 0, scale: showScrollTop ? 1 : 0 }}
         transition={{ duration: 0.3 }}
         onClick={scrollToTop}
-        className="fixed bottom-24 right-8 z-40 w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full shadow-lg hover:shadow-xl flex items-center justify-center text-white text-xl transition-all duration-300 hover:scale-110"
+        className="fixed bottom-24 right-8 z-40 w-12 h-12 bg-[image:var(--primary-gradient)] rounded-full shadow-lg hover:shadow-xl flex items-center justify-center text-white text-xl transition-all duration-300 hover:scale-110"
         title="Scroll to top"
       >
         ↑
@@ -1522,7 +1434,7 @@ export default function LandingPage() {
             className="absolute bottom-20 right-0 w-96 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl flex flex-col h-96 mb-4"
           >
             {/* Chat Header */}
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-4 rounded-t-lg flex justify-between items-center">
+            <div className="bg-[image:var(--primary-gradient)] p-4 rounded-t-lg flex justify-between items-center">
               <div>
                 <h3 className="text-white font-bold">CricIQ Assistant</h3>
                 <p className="text-blue-100 text-xs">Always here to help 🤖</p>
@@ -1569,7 +1481,7 @@ export default function LandingPage() {
               />
               <button
                 onClick={handleSendMessage}
-                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded px-4 py-2 transition font-semibold text-sm"
+                className="bg-[image:var(--primary-gradient)] hover:opacity-90 text-white rounded px-4 py-2 transition font-semibold text-sm"
               >
                 Send
               </button>
@@ -1581,7 +1493,7 @@ export default function LandingPage() {
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setShowChat(!showChat)}
-          className="w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full shadow-lg hover:shadow-xl flex items-center justify-center text-white text-2xl transition-all duration-300 group"
+          className="w-14 h-14 bg-[image:var(--primary-gradient)] rounded-full shadow-lg hover:shadow-xl flex items-center justify-center text-white text-2xl transition-all duration-300 group"
           title="Chat with us"
         >
           <motion.span
