@@ -10,13 +10,14 @@ Handles:
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, UploadFile, File, Form, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, List
 from pathlib import Path
 from datetime import datetime
 import logging
 import shutil
+import time
 import uuid
 import os
 
@@ -31,6 +32,77 @@ from schemas.video import (
     HighlightEventResponse, VideoEventsResponse
 )
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError
+
+logger = logging.getLogger(__name__)
+
+# Optional GCS storage for large video binaries
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "")
+_gcs_bucket = None
+try:
+    from google.cloud import storage as gcs
+
+    if GCS_BUCKET_NAME:
+        _gcs_bucket = gcs.Client().bucket(GCS_BUCKET_NAME)
+except Exception as _gcs_err:
+    logger.warning("Videos route GCS init failed: %s", _gcs_err)
+
+
+def _upload_local_to_gcs(local_path: Path, blob_name: str) -> str | None:
+    """Upload a local file to GCS and return public URL; None if GCS unavailable."""
+    if _gcs_bucket is None:
+        return None
+    blob = _gcs_bucket.blob(blob_name)
+    blob.upload_from_filename(str(local_path))
+    return f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{blob_name}"
+
+
+def _commit_with_retry(db: Session, *, action: str, max_retries: int = 3) -> None:
+    """Commit with retry for transient DB disconnects (e.g., pooled Postgres drops)."""
+    last_error: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            db.commit()
+            return
+        except OperationalError as exc:
+            last_error = exc
+            db.rollback()
+            if attempt < max_retries - 1:
+                backoff_seconds = 0.5 * (attempt + 1)
+                logger.warning(
+                    "DB commit failed for %s (attempt %s/%s): %s. Retrying in %.1fs",
+                    action,
+                    attempt + 1,
+                    max_retries,
+                    exc,
+                    backoff_seconds,
+                )
+                time.sleep(backoff_seconds)
+                continue
+            break
+
+    logger.error("DB commit failed permanently for %s: %s", action, last_error)
+    raise HTTPException(
+        status_code=503,
+        detail="Database connection temporarily unavailable. Please retry.",
+    )
+
+
+def _refresh_video_with_retry(db: Session, video: Video, *, action: str) -> Video:
+    """Refresh inserted video with one fallback query when refresh hits a dropped connection."""
+    try:
+        db.refresh(video)
+        return video
+    except OperationalError as exc:
+        logger.warning("DB refresh failed for %s: %s. Retrying via query.", action, exc)
+        db.rollback()
+        fetched = db.query(Video).filter(Video.id == video.id).first()
+        if fetched is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Upload saved but could not re-read database row. Please retry.",
+            )
+        return fetched
 
 # Lazy import for legacy engine functions
 def get_engine_functions():
@@ -43,7 +115,6 @@ def get_engine_functions():
     return download_video, fetch_match_data, generate_highlights, create_highlight_reel
 
 router = APIRouter(prefix="/videos", tags=["videos"])
-logger = logging.getLogger(__name__)
 
 # ============ Storage Configuration ============
 UPLOAD_DIR = Path("storage/uploads")
@@ -140,12 +211,25 @@ async def upload_video(
         except ValueError:
             pass
     
+    # Prefer GCS for binary storage when configured.
+    storage_path = str(file_path)
+    if _gcs_bucket is not None:
+        try:
+            gcs_blob = f"videos/raw/{video_id}{file_ext}"
+            gcs_url = _upload_local_to_gcs(file_path, gcs_blob)
+            if gcs_url:
+                storage_path = gcs_url
+                file_path.unlink(missing_ok=True)
+                logger.info("Video uploaded to GCS: %s", gcs_blob)
+        except Exception as gcs_err:
+            logger.warning("GCS upload failed, keeping local file: %s", gcs_err)
+
     # Create video record
     video = Video(
         id=video_id,
         title=title,
         description=description,
-        file_path=str(file_path),
+        file_path=storage_path,
         file_size_bytes=file_size,
         match_date=parsed_date,
         teams=teams,
@@ -156,8 +240,8 @@ async def upload_video(
     )
     
     db.add(video)
-    db.commit()
-    db.refresh(video)
+    _commit_with_retry(db, action="file upload video insert")
+    video = _refresh_video_with_retry(db, video, action="file upload video insert")
     
     logger.info(f"Video uploaded: {video.id} by {current_user.email}")
     
@@ -189,6 +273,7 @@ async def upload_youtube_video(
     teams: Optional[str] = Form(None),
     venue: Optional[str] = Form(None),
     visibility: str = Form("private"),
+    transient: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(["ADMIN", "COACH"])),
 ):
@@ -255,12 +340,27 @@ async def upload_youtube_video(
         except ValueError:
             pass
     
+    # Prefer GCS for binary storage when configured, unless this is a transient
+    # source used only for immediate OCR processing.
+    storage_path = str(file_path)
+    if _gcs_bucket is not None and not transient:
+        try:
+            ext = file_path.suffix or ".mp4"
+            gcs_blob = f"videos/raw/{video_id}{ext}"
+            gcs_url = _upload_local_to_gcs(file_path, gcs_blob)
+            if gcs_url:
+                storage_path = gcs_url
+                file_path.unlink(missing_ok=True)
+                logger.info("YouTube video uploaded to GCS: %s", gcs_blob)
+        except Exception as gcs_err:
+            logger.warning("YouTube GCS upload failed, keeping local file: %s", gcs_err)
+
     # Create video record
     video = Video(
         id=video_id,
         title=final_title,
         description=description,
-        file_path=str(file_path),
+        file_path=storage_path,
         file_size_bytes=file_size,
         duration_seconds=duration,
         match_date=parsed_date,
@@ -272,8 +372,8 @@ async def upload_youtube_video(
     )
     
     db.add(video)
-    db.commit()
-    db.refresh(video)
+    _commit_with_retry(db, action="youtube upload video insert")
+    video = _refresh_video_with_retry(db, video, action="youtube upload video insert")
     
     logger.info(f"YouTube video uploaded: {video.id} from {url} by {current_user.email}")
     
@@ -441,6 +541,53 @@ def list_private_videos(
     )
 
 
+@router.get("/mine", response_model=VideoListResponse)
+def list_my_videos(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List videos uploaded by the current user (any visibility)."""
+    offset = (page - 1) * per_page
+
+    query = db.query(Video).filter(
+        Video.uploaded_by == current_user.id,
+        Video.deleted_at.is_(None),
+    )
+
+    total = query.count()
+    videos = query.order_by(Video.created_at.desc()).offset(offset).limit(per_page).all()
+
+    return VideoListResponse(
+        videos=[
+            VideoResponse(
+                id=v.id,
+                title=v.title,
+                description=v.description,
+                duration_seconds=v.duration_seconds,
+                match_date=v.match_date,
+                teams=v.teams,
+                venue=v.venue,
+                visibility=v.visibility,
+                status=v.status,
+                total_events=v.total_events or 0,
+                total_fours=v.total_fours or 0,
+                total_sixes=v.total_sixes or 0,
+                total_wickets=v.total_wickets or 0,
+                uploaded_by=v.uploaded_by,
+                created_at=v.created_at,
+                file_path=v.file_path,
+                supercut_path=v.highlight_job.supercut_path if v.highlight_job else None,
+            )
+            for v in videos
+        ],
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
+
+
 @router.get("/{video_id}", response_model=VideoResponse)
 def get_video(
     video_id: str,
@@ -527,7 +674,11 @@ def stream_video(
     finally:
         db.close()
     
-    # Now stream file with DB connection closed
+    # Remote storage URL (e.g., GCS public URL)
+    if file_path_str.startswith("http://") or file_path_str.startswith("https://"):
+        return RedirectResponse(url=file_path_str, status_code=307)
+
+    # Now stream local file with DB connection closed
     file_path = Path(file_path_str)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Video file not found")
@@ -586,7 +737,11 @@ def stream_supercut(
     finally:
         db.close()
     
-    # Now stream file with DB connection closed
+    # Remote storage URL (e.g., GCS public URL)
+    if supercut_path_str.startswith("http://") or supercut_path_str.startswith("https://"):
+        return RedirectResponse(url=supercut_path_str, status_code=307)
+
+    # Now stream local file with DB connection closed
     supercut_path = Path(supercut_path_str)
     if not supercut_path.exists():
         raise HTTPException(status_code=404, detail="Supercut file not found on disk")

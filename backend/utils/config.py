@@ -17,7 +17,12 @@ class Settings(BaseSettings):
     # JWT
     SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv(
+            "ACCESS_TOKEN_EXPIRE_MINUTES",
+            os.getenv("JWT_EXPIRATION_MINUTES", "10080"),
+        )
+    )
 
     # API Keys
     CRICKETDATA_API_KEY: str = ""
