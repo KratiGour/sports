@@ -145,6 +145,10 @@ export const videosApi = {
   // Private dashboard (Premium)
   listPrivate: (page = 1, perPage = 20) => 
     api.get('/videos/private', { params: { page, per_page: perPage } }),
+
+  // Current user's uploads (all visibilities)
+  listMine: (page = 1, perPage = 20) =>
+    api.get('/videos/mine', { params: { page, per_page: perPage } }),
   
   // Get video details by ID
   getById: (videoId: string) => 
@@ -155,16 +159,22 @@ export const videosApi = {
     api.get(`/videos/${videoId}/events`, { params: { event_type: eventType } }),
   
   // Upload video (multipart form data)
-  upload: (formData: FormData, onProgress?: (progress: number) => void) => 
-    api.post('/videos/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+  upload: (formData: FormData, onProgress?: (progress: number) => void) => {
+    const token = localStorage.getItem('access_token');
+    return api.post('/videos/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      timeout: 0,
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           onProgress(progress);
         }
       },
-    }),
+    });
+  },
   
   // Upload video from YouTube URL
   uploadYouTube: (data: {
@@ -175,6 +185,7 @@ export const videosApi = {
     venue?: string;
     match_date?: string;
     visibility?: 'public' | 'private';
+    transient?: boolean;
   }, onProgress?: (progress: number) => void) => {
     const formData = new FormData();
     formData.append('url', data.url);
@@ -184,16 +195,24 @@ export const videosApi = {
     if (data.venue) formData.append('venue', data.venue);
     if (data.match_date) formData.append('match_date', data.match_date);
     formData.append('visibility', data.visibility || 'private');
+    if (typeof data.transient === 'boolean') {
+      formData.append('transient', String(data.transient));
+    }
     
+    const token = localStorage.getItem('access_token');
+
     return api.post('/videos/upload/youtube', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           onProgress(progress);
         }
       },
-      timeout: 900000, // 15 minutes for YouTube download
+      timeout: 0,
     });
   },
   
