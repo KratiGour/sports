@@ -147,7 +147,7 @@ export default function RegisterPage() {
               <i className="fas fa-user-plus text-white text-2xl"></i>
             </div>
             <h1 className="text-2xl font-bold gradient-text mb-2">Create Account</h1>
-            <p className="text-white/60 text-sm">Join SportVision AI and start improving</p>
+            <p className="text-white/60 text-sm">Join PitchVision and start improving</p>
           </motion.div>
 
           {/* Error Message */}

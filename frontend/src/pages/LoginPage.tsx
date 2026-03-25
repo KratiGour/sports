@@ -105,7 +105,7 @@ export default function LoginPage() {
               <i className="fas fa-cricket-bat-ball text-white text-2xl"></i>
             </div>
             <h1 className="text-2xl font-bold gradient-text mb-2">Welcome Back</h1>
-            <p className="text-white/60 text-sm">Sign in to your SportVision AI account</p>
+            <p className="text-white/60 text-sm">Sign in to your PitchVision account</p>
           </motion.div>
 
           {/* Success Message */}
