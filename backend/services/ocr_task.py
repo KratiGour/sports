@@ -6,10 +6,15 @@ Integrates with the existing ocr_engine.py to process videos asynchronously.
 
 import logging
 import traceback
-from datetime import datetime
+import os
+import tempfile
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List
 
+import google.auth
+import google.auth.transport.requests
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -17,6 +22,129 @@ from database.config import get_background_db, BackgroundSessionLocal
 from database.models.video import Video, HighlightJob, HighlightEvent, VideoStatus
 
 logger = logging.getLogger(__name__)
+
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "")
+
+_gcs_bucket = None
+try:
+    from google.cloud import storage as gcs
+
+    if GCS_BUCKET_NAME:
+        _gcs_bucket = gcs.Client().bucket(GCS_BUCKET_NAME)
+except Exception as gcs_err:
+    logger.warning("OCR task GCS init failed: %s", gcs_err)
+
+
+def _extract_gcs_blob_name(video_path: str) -> str | None:
+    if video_path.startswith("gs://"):
+        without_scheme = video_path[5:]
+        bucket, _, blob_name = without_scheme.partition("/")
+        if bucket == GCS_BUCKET_NAME and blob_name:
+            return blob_name
+        return None
+
+    marker = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/"
+    if video_path.startswith(marker):
+        return video_path[len(marker) :]
+
+    if video_path.startswith("http://") or video_path.startswith("https://"):
+        return None
+
+    if "/" in video_path and Path(video_path).suffix:
+        return video_path
+    return None
+
+
+def _generate_gcs_read_url(blob_name: str, hours: int = 6) -> str:
+    if _gcs_bucket is None:
+        raise RuntimeError("GCS bucket is not configured")
+
+    blob = _gcs_bucket.blob(blob_name)
+    auth_request = google.auth.transport.requests.Request()
+    credentials, _ = google.auth.default()
+    credentials.refresh(auth_request)
+
+    service_account_email = getattr(credentials, "service_account_email", None)
+    if not service_account_email:
+        raise RuntimeError("Current ADC credentials are not service-account credentials")
+
+    return blob.generate_signed_url(
+        version="v4",
+        expiration=datetime.utcnow() + timedelta(hours=hours),
+        method="GET",
+        service_account_email=service_account_email,
+        access_token=credentials.token,
+    )
+
+
+def _resolve_video_source(video_path: str) -> tuple[str, bool]:
+    """Resolve a processable source and whether it should use streaming mode."""
+    if Path(video_path).exists():
+        return video_path, False
+
+    blob_name = _extract_gcs_blob_name(video_path)
+    if blob_name and _gcs_bucket is not None:
+        try:
+            return _generate_gcs_read_url(blob_name), True
+        except Exception as sign_err:
+            logger.warning("Failed to sign read URL for %s: %s", blob_name, sign_err)
+            return f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{blob_name}", True
+
+    if video_path.startswith("http://") or video_path.startswith("https://"):
+        return video_path, True
+
+    return video_path, False
+
+
+def _store_supercut(video_id: str, local_supercut_path: str) -> str:
+    """Persist final supercut and return URL/path stored in DB."""
+    if _gcs_bucket is not None:
+        highlight_blob = f"highlights/{video_id}_highlights.mp4"
+        blob = _gcs_bucket.blob(highlight_blob)
+        blob.upload_from_filename(local_supercut_path)
+        return f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{highlight_blob}"
+
+    highlight_dir = Path("storage/highlight")
+    highlight_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{video_id}_highlights.mp4"
+    target = highlight_dir / filename
+    with open(local_supercut_path, "rb") as src, open(target, "wb") as dst:
+        dst.write(src.read())
+    return f"/static/highlights/{filename}"
+
+
+def _safe_rollback(db: Session) -> None:
+    try:
+        db.rollback()
+    except Exception:
+        pass
+
+
+def _safe_close(db: Session) -> None:
+    try:
+        db.close()
+    except Exception:
+        pass
+
+
+def _reconnect_and_load(db: Session, video_id: str, retries: int = 3, delay_seconds: float = 1.0) -> tuple[Session, Video | None, HighlightJob | None]:
+    """Recover from broken DB session and reload video/job state with retries."""
+    _safe_rollback(db)
+    _safe_close(db)
+
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        try:
+            new_db: Session = BackgroundSessionLocal()
+            video = new_db.query(Video).filter(Video.id == video_id).first()
+            job = new_db.query(HighlightJob).filter(HighlightJob.video_id == video_id).first()
+            return new_db, video, job
+        except Exception as exc:
+            last_error = exc
+            if attempt < retries - 1:
+                time.sleep(delay_seconds * (attempt + 1))
+
+    raise RuntimeError(f"Unable to reconnect DB session for video {video_id}: {last_error}")
 
 
 def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
@@ -32,6 +160,7 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
     """
     # Use background session to avoid polluting the main connection pool
     db: Session = get_background_db()
+    temp_video_path: str | None = None
     
     try:
         # Fetch video and job
@@ -39,6 +168,8 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
         if not video:
             logger.error(f"Video {video_id} not found")
             return
+
+        source_video_path = video.file_path
         
         job = db.query(HighlightJob).filter(HighlightJob.video_id == video_id).first()
         if not job:
@@ -63,6 +194,7 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
         from scripts.ocr_engine import (
             ScoreboardConfig,
             process_video,
+            process_video_streaming,
             extract_clips,
             create_supercut,
         )
@@ -85,14 +217,22 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
             if 'start_time' in config:
                 ocr_config.start_time = config['start_time']
         
-        # Run OCR detection
-        video_path = video.file_path
-        events = process_video(
-            video_path=video_path,
-            config=ocr_config,
-            sample_interval=1.0,
-            min_confidence=0.4,
-        )
+        # Run OCR detection in streaming mode for remote/GCS sources.
+        video_source, use_streaming = _resolve_video_source(video.file_path)
+        if use_streaming:
+            events = process_video_streaming(
+                video_source=video_source,
+                config=ocr_config,
+                sample_interval=1.0,
+                min_confidence=0.4,
+            )
+        else:
+            events = process_video(
+                video_path=video_source,
+                config=ocr_config,
+                sample_interval=1.0,
+                min_confidence=0.4,
+            )
         
         logger.info(f"Detected {len(events)} events for video {video_id}")
         
@@ -104,34 +244,42 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
             db.execute(text("SELECT 1"))
         except Exception:
             logger.warning("Database connection lost, creating new session")
-            db.rollback()
-            db.close()
-            db = BackgroundSessionLocal()
-            job = db.query(HighlightJob).filter(HighlightJob.video_id == video_id).first()
+            db, _, job = _reconnect_and_load(db, video_id)
+            if job is None:
+                raise RuntimeError(f"HighlightJob {video_id} not found during DB recovery")
             job.progress_percent = 50
         
         db.commit()
         db.refresh(job)
         
-        # Extract clips with configurable padding
-        clips_dir = Path("storage/trimmed") / video_id
-        clips_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Use config values for padding or fall back to defaults
+        # Extract clips using HTTP range requests from the same source and keep
+        # temporary clips only inside a transient work directory.
         clip_before = config.get('padding_before', 12) if config else 12
         clip_after = config.get('padding_after', 8) if config else 8
-        
+
         logger.info(f"Extracting clips with padding: before={clip_before}s, after={clip_after}s")
-        
-        clips = []
-        if events:
-            clips = extract_clips(
-                video_path=video_path,
-                events=events,
-                output_dir=str(clips_dir),
-                before=clip_before,
-                after=clip_after,
-            )
+
+        clips: List[str] = []
+        supercut_path: str | None = None
+        with tempfile.TemporaryDirectory(prefix=f"ocr_{video_id}_") as work_dir:
+            clips_dir = Path(work_dir) / "clips"
+            clips_dir.mkdir(parents=True, exist_ok=True)
+
+            if events:
+                clips = extract_clips(
+                    video_path=video_source,
+                    events=events,
+                    output_dir=str(clips_dir),
+                    before=clip_before,
+                    after=clip_after,
+                )
+
+            # Create final supercut in the temp workspace and persist only the final artifact.
+            if clips:
+                supercut_tmp = Path(work_dir) / f"{video_id}_highlights.mp4"
+                supercut_local = create_supercut(clips, str(supercut_tmp))
+                if supercut_local:
+                    supercut_path = _store_supercut(video_id, supercut_local)
         
         job.progress_percent = 80
         
@@ -140,22 +288,13 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
             db.execute(text("SELECT 1"))
         except Exception:
             logger.warning("Database connection lost, creating new session")
-            db.rollback()
-            db.close()
-            db = BackgroundSessionLocal()
-            job = db.query(HighlightJob).filter(HighlightJob.video_id == video_id).first()
+            db, _, job = _reconnect_and_load(db, video_id)
+            if job is None:
+                raise RuntimeError(f"HighlightJob {video_id} not found during DB recovery")
             job.progress_percent = 80
         
         db.commit()
         db.refresh(job)
-        
-        # Create supercut
-        supercut_path = None
-        if clips:
-            supercut_dir = Path("storage/highlight")
-            supercut_dir.mkdir(parents=True, exist_ok=True)
-            supercut_file = supercut_dir / f"{video_id}_highlights.mp4"
-            supercut_path = create_supercut(clips, str(supercut_file))
         
         # Save events to database
         fours = sixes = wickets = 0
@@ -166,7 +305,7 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
                 timestamp_seconds=event['timestamp'],
                 score_before=event.get('score_before'),
                 score_after=event.get('score_after'),
-                clip_path=clips[i] if i < len(clips) else None,
+                clip_path=None,
             )
             db.add(highlight_event)
             
@@ -192,17 +331,27 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
         job.completed_at = datetime.utcnow()
         job.events_detected = events
         job.supercut_path = supercut_path
+
+        # Optional transient-source cleanup: keep only generated highlight artifact.
+        if config and config.get("delete_source_after_processing") and source_video_path:
+            source_path = Path(source_video_path)
+            if source_path.exists() and source_path.is_file():
+                try:
+                    source_path.unlink(missing_ok=True)
+                    if supercut_path:
+                        video.file_path = supercut_path
+                    logger.info("Deleted transient source video for %s: %s", video_id, source_video_path)
+                except Exception as cleanup_err:
+                    logger.warning("Failed to delete transient source %s: %s", source_video_path, cleanup_err)
         
         # Validate connection before final commit
         try:
             db.execute(text("SELECT 1"))
         except Exception:
             logger.warning("Database connection lost, creating new session")
-            db.rollback()
-            db.close()
-            db = BackgroundSessionLocal()
-            video = db.query(Video).filter(Video.id == video_id).first()
-            job = db.query(HighlightJob).filter(HighlightJob.video_id == video_id).first()
+            db, video, job = _reconnect_and_load(db, video_id)
+            if video is None or job is None:
+                raise RuntimeError(f"Video/job missing during final DB recovery for {video_id}")
             
             # Re-apply final updates
             video.status = VideoStatus.COMPLETED.value
@@ -228,41 +377,55 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
         logger.error(traceback.format_exc())
         
         # Rollback any pending transaction
-        try:
-            db.rollback()
-        except Exception:
-            pass
+        _safe_rollback(db)
         
-        # Update status to failed with new session if needed
-        try:
-            # Test if session is still valid
+        # Update status to failed with retries to survive temporary DNS/network loss.
+        error_text = str(e)[:500]
+        max_failure_update_retries = 6
+        for attempt in range(max_failure_update_retries):
             try:
-                db.execute(text("SELECT 1"))
-            except Exception:
-                # Session is dead, create new one
-                logger.warning("Database session invalid, creating new session for error update")
-                db.close()
-                db = BackgroundSessionLocal()
-            
-            video = db.query(Video).filter(Video.id == video_id).first()
-            job = db.query(HighlightJob).filter(HighlightJob.video_id == video_id).first()
-            
-            if video:
-                video.status = VideoStatus.FAILED.value
-                video.processing_error = str(e)[:500]  # Truncate to avoid huge errors
-            
-            if job:
-                job.status = VideoStatus.FAILED.value
-                job.error_message = str(e)[:500]
-                job.retry_count += 1
-            
-            db.commit()
-        except Exception as db_error:
-            logger.error(f"Failed to update error status: {db_error}")
-            db.rollback()
+                try:
+                    db.execute(text("SELECT 1"))
+                except Exception:
+                    logger.warning("Database session invalid, recreating session for error update")
+                    db, _, _ = _reconnect_and_load(db, video_id, retries=3, delay_seconds=1.0)
+
+                video = db.query(Video).filter(Video.id == video_id).first()
+                job = db.query(HighlightJob).filter(HighlightJob.video_id == video_id).first()
+
+                if video:
+                    video.status = VideoStatus.FAILED.value
+                    video.processing_error = error_text
+
+                if job:
+                    job.status = VideoStatus.FAILED.value
+                    job.error_message = error_text
+                    job.retry_count += 1
+
+                db.commit()
+                logger.info("Marked OCR job as FAILED for video %s after error", video_id)
+                break
+            except Exception as db_error:
+                logger.error(
+                    "Failed to update error status for %s (attempt %s/%s): %s",
+                    video_id,
+                    attempt + 1,
+                    max_failure_update_retries,
+                    db_error,
+                )
+                _safe_rollback(db)
+                if attempt < max_failure_update_retries - 1:
+                    time.sleep(2.0 * (attempt + 1))
+                else:
+                    logger.error("Giving up marking FAILED state for %s after repeated DB failures", video_id)
     
     finally:
-        db.close()
+        if temp_video_path and os.path.exists(temp_video_path):
+            try:
+                os.remove(temp_video_path)
+            except OSError:
+                pass
+        _safe_close(db)
 
 
 def get_job_status(video_id: str) -> Optional[Dict]:

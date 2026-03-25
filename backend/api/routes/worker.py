@@ -29,11 +29,13 @@ from sqlalchemy.orm import Session
 
 from database.config import SessionLocal
 from database.models.submission import VideoSubmission, SubmissionStatus
+from database.models.video import Video, HighlightJob, VideoVisibility, VideoStatus
 from database.crud.submission import (
     get_submission_by_id,
     mark_processing,
     save_analysis_results,
 )
+from services.ocr_task import run_ocr_processing
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -99,12 +101,67 @@ _batting_gemini = BattingGeminiManager() if BATTING_ENGINE_AVAILABLE else None
 class ProcessVideoRequest(BaseModel):
     submission_id: str
     blob_name: str
+    pipeline: str = "submission_analysis"
 
 
 class ProcessVideoResponse(BaseModel):
     submission_id: str
     status: str
     pdf_blob: str | None = None
+
+
+def _run_ocr_highlights_pipeline(db: Session, sub: VideoSubmission, blob_name: str) -> ProcessVideoResponse:
+    """Run OCR highlights flow for raw match uploads and update submission metadata."""
+    # Ensure we have a Video record linked to this uploaded blob.
+    video = (
+        db.query(Video)
+        .filter(Video.file_path == blob_name, Video.uploaded_by == sub.player_id)
+        .first()
+    )
+    if video is None:
+        video = Video(
+            title=sub.original_filename,
+            description=f"OCR highlights source for submission {sub.id}",
+            file_path=blob_name,
+            visibility=VideoVisibility.PUBLIC.value,
+            uploaded_by=sub.player_id,
+            status=VideoStatus.PENDING.value,
+        )
+        db.add(video)
+        db.commit()
+        db.refresh(video)
+    elif video.visibility != VideoVisibility.PUBLIC.value:
+        video.visibility = VideoVisibility.PUBLIC.value
+        db.commit()
+        db.refresh(video)
+
+    job = db.query(HighlightJob).filter(HighlightJob.video_id == video.id).first()
+    if job is None:
+        job = HighlightJob(video_id=video.id, status=VideoStatus.PENDING.value)
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+    logger.info("OCR highlights pipeline starting — submission=%s video=%s", sub.id, video.id)
+    run_ocr_processing(video.id, config={"padding_before": 12, "padding_after": 10})
+
+    db.expire_all()
+    video = db.query(Video).filter(Video.id == video.id).first()
+    job = db.query(HighlightJob).filter(HighlightJob.video_id == video.id).first()
+
+    if video and video.status == VideoStatus.COMPLETED.value and job and job.supercut_path:
+        sub.status = SubmissionStatus.DRAFT_REVIEW
+        sub.annotated_video_url = job.supercut_path
+        sub.ai_draft_text = "OCR highlights generated successfully."
+        db.commit()
+        logger.info("OCR highlights completed — submission=%s video=%s", sub.id, video.id)
+        return ProcessVideoResponse(submission_id=sub.id, status=sub.status.value, pdf_blob=None)
+
+    error_text = (video.processing_error if video else None) or (job.error_message if job else None) or "OCR highlight generation failed"
+    sub.status = SubmissionStatus.PENDING
+    sub.ai_draft_text = f"OCR highlight generation failed: {error_text}"
+    db.commit()
+    raise HTTPException(status_code=500, detail=error_text)
 
 
 # Auth helper — validates Cloud Tasks / shared-secret header
@@ -163,6 +220,10 @@ def process_video(
                 status_code=409,
                 detail=f"Submission already in '{sub.status.value}' — cannot re-process",
             )
+
+        if body.pipeline == "ocr_highlights":
+            mark_processing(db, sub)
+            return _run_ocr_highlights_pipeline(db, sub, body.blob_name)
 
         # 1. Download video from GCS to /tmp/ 
         blob = _bucket.blob(body.blob_name)  # type: ignore[union-attr]

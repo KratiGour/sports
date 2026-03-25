@@ -31,6 +31,7 @@ from database.config import Base
 
 class SubmissionStatus(str, PyEnum):
     """State machine for video submissions."""
+    UPLOADING = "UPLOADING"
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
     DRAFT_REVIEW = "DRAFT_REVIEW"

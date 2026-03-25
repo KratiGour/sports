@@ -20,12 +20,14 @@ interface Video {
 }
 
 type EventFilter = 'all' | 'FOUR' | 'SIX' | 'WICKET';
+type SortFilter = 'auto' | 'newest' | 'oldest' | 'processing-first';
 
 export default function HighlightsPage() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
+  const [sortFilter, setSortFilter] = useState<SortFilter>('auto');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -51,6 +53,10 @@ export default function HighlightsPage() {
   }, [page, searchQuery, eventFilter]);
 
   // Filter videos based on search and event type
+  const hasProcessingVideos = videos.some((video) => String(video.status || '').toLowerCase() === 'processing');
+  const effectiveSortFilter: Exclude<SortFilter, 'auto'> =
+    sortFilter === 'auto' ? (hasProcessingVideos ? 'processing-first' : 'newest') : sortFilter;
+
   const filteredVideos = videos.filter((video) => {
     const matchesSearch =
       video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -63,6 +69,21 @@ export default function HighlightsPage() {
     if (eventFilter === 'WICKET' && video.total_wickets > 0) return matchesSearch;
 
     return false;
+  }).sort((a, b) => {
+    if (effectiveSortFilter === 'processing-first') {
+      const aProcessing = String(a.status || '').toLowerCase() === 'processing';
+      const bProcessing = String(b.status || '').toLowerCase() === 'processing';
+      if (aProcessing !== bProcessing) {
+        return aProcessing ? -1 : 1;
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+
+    if (effectiveSortFilter === 'oldest') {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    }
+
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
   return (
@@ -116,6 +137,21 @@ export default function HighlightsPage() {
             <option value="FOUR" className="bg-gray-900">Fours Only</option>
             <option value="SIX" className="bg-gray-900">Sixes Only</option>
             <option value="WICKET" className="bg-gray-900">Wickets Only</option>
+          </select>
+        </div>
+
+        {/* Sorting */}
+        <div className="flex items-center gap-2">
+          <i className="fas fa-sort text-white/40"></i>
+          <select
+            value={sortFilter}
+            onChange={(e) => setSortFilter(e.target.value as SortFilter)}
+            className="px-4 py-3 glass border border-white/20 rounded-2xl text-white focus:outline-none focus:border-blue-500 bg-transparent"
+          >
+            <option value="auto" className="bg-gray-900">Auto (Processing First)</option>
+            <option value="newest" className="bg-gray-900">Newest First</option>
+            <option value="oldest" className="bg-gray-900">Oldest First</option>
+            <option value="processing-first" className="bg-gray-900">OCR Processing First</option>
           </select>
         </div>
       </motion.div>
@@ -230,10 +266,22 @@ function HighlightCard({ video, index }: { video: Video; index: number }) {
             {formatDuration(video.duration_seconds)}
           </div>
           {/* Status badge */}
-          {video.status === 'processing' && (
+          {String(video.status || '').toLowerCase() === 'processing' && (
             <div className="absolute top-2 left-2 px-2 py-1 bg-yellow-500/80 rounded-lg text-xs text-white flex items-center gap-1">
               <i className="fas fa-spinner animate-spin"></i>
-              Processing
+              OCR Processing
+            </div>
+          )}
+          {String(video.status || '').toLowerCase() === 'failed' && (
+            <div className="absolute top-2 left-2 px-2 py-1 bg-red-600/85 rounded-lg text-xs text-white flex items-center gap-1">
+              <i className="fas fa-triangle-exclamation"></i>
+              OCR Failed
+            </div>
+          )}
+          {String(video.status || '').toLowerCase() === 'completed' && (
+            <div className="absolute top-2 left-2 px-2 py-1 bg-emerald-600/85 rounded-lg text-xs text-white flex items-center gap-1">
+              <i className="fas fa-check"></i>
+              OCR Ready
             </div>
           )}
         </div>

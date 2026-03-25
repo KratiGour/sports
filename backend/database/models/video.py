@@ -7,7 +7,7 @@ import uuid
 from enum import Enum
 from datetime import datetime
 from sqlalchemy import (
-    Column, String, Integer, Float, DateTime, ForeignKey, 
+    Column, String, Integer, BigInteger, Float, DateTime, ForeignKey, 
     Text, JSON, Boolean, Enum as SQLEnum
 )
 from sqlalchemy.orm import relationship
@@ -51,7 +51,7 @@ class Video(Base):
     file_path = Column(String(500), nullable=False)
     thumbnail_path = Column(String(500), nullable=True)
     duration_seconds = Column(Integer, nullable=True)
-    file_size_bytes = Column(Integer, nullable=True)
+    file_size_bytes = Column(BigInteger, nullable=True)
     
     # Match metadata
     match_date = Column(DateTime, nullable=True)
