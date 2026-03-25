@@ -534,99 +534,148 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 relative overflow-hidden">
+      <section className="relative overflow-hidden">
         {/* Animated background */}
         <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-blue-500/10 animate-pulse"></div>
         
-        <div className="max-w-6xl mx-auto relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Left Content */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight mb-4 sm:mb-6">
-                {t.uploadYour}
-                <br />
-                {t.cricketVideo}
-                <br />
-                <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">{t.getCoach}</span>
-              </h1>
+        <div className="max-w-7xl mx-auto relative z-10 px-4">
 
-              <p className="text-sm sm:text-base md:text-lg text-gray-300 mb-6 sm:mb-8">
-                {t.heroDescription}
-              </p>
-
-              {/* Trust Badge */}
-              <div className="mb-8 inline-flex items-center gap-2 bg-slate-800/50 border border-slate-700 rounded-full px-4 py-2">
-                <span className="text-green-400 font-bold">✓</span>
-                <span className="text-sm text-gray-300">Made for the Next Generation of Cricketers</span>
+          {/* ========================================================== */}
+          {/* 1. MOBILE ONLY (Phone ke liye layout aur space fix) */}
+          {/* ========================================================== */}
+          <div className="sm:hidden pt-6 pb-10">
+            <div className="grid grid-cols-2 gap-4 items-start">
+              
+              {/* Batting image on top (Red Box) */}
+              <div className="col-span-2 w-full rounded-2xl overflow-hidden border border-slate-700 shadow-xl">
+                <img src={cricketBatting} alt="batting" className="w-full h-44 object-cover object-top" />
               </div>
 
-              <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 mb-8">
-                <div className="flex flex-col items-start gap-1">
-                  <span className="inline-flex items-center gap-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                    <Zap className="w-3 h-3" /> {t.limitedOffer}
-                  </span>
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="w-full sm:w-auto"
-                  >
-                    <Link to="/register" className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 bg-[image:var(--primary-gradient)] hover:opacity-90 text-white font-bold text-xs sm:text-sm rounded transition text-center shadow-lg hover:shadow-xl relative overflow-hidden group block">
-                      <span className="relative z-10">{t.registerBtn}</span>
-                      <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
-                    </Link>
-                  </motion.div>
-                </div>
-                <motion.button 
-                  onClick={() => setShowDemoModal(true)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 border-2 border-purple-500 text-purple-400 hover:bg-purple-500/10 font-bold text-xs sm:text-sm rounded transition flex items-center justify-center gap-2 group"
-                >
-                  <Play className="w-4 h-4" />
-                  {t.watchDemo}
-                </motion.button>
-              </div>
-
-
-            </motion.div>
-
-            {/* Right - Product Mockup */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="relative"
-            >
-              <div className="rounded-2xl overflow-hidden border-4 border-slate-700" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
-                <img
-                  src={cricketBatting}
-                  alt="Cricket batting"
-                  className="w-full h-48 sm:h-64 lg:h-96 object-cover object-top"
-                />
-              </div>
-
-              <div className="mt-4 hidden sm:flex gap-4">
-                <div className="flex-1 rounded-2xl overflow-hidden border-4 border-slate-700 h-20 sm:h-24" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
-                  <img
-                    src={cricketFielding}
-                    alt="Cricket fielding"
-                    className="w-full h-full object-cover object-center"
-                  />
-                </div>
-                <div className="flex-1 rounded-2xl overflow-hidden border-4 border-slate-700 h-20 sm:h-24" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
-                  <img
-                    src={cricketAction}
-                    alt="Cricket action"
-                    className="w-full h-full object-cover object-center"
-                  />
+              {/* Text and BOTH buttons (Left Side) */}
+              <div className="flex flex-col gap-2">
+                <h1 className="text-xl font-black text-white leading-tight">
+                  {t.uploadYour} <br /> {t.cricketVideo} <br />
+                  <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">{t.getCoach}</span>
+                </h1>
+                <p className="text-[10px] text-gray-400 leading-tight">
+                  {t.heroDescription.substring(0, 60)}...
+                </p>
+                <div className="flex flex-col gap-2 mt-2">
+                  <Link to="/register" className="w-full py-2 bg-[image:var(--primary-gradient)] text-white font-bold text-[10px] rounded text-center shadow-lg">
+                    REGISTER
+                  </Link>
+                  <button onClick={() => setShowDemoModal(true)} className="w-full py-2 border border-purple-500 text-purple-400 font-bold text-[10px] rounded flex items-center justify-center gap-1">
+                    <Play className="w-3 h-3" /> WATCH DEMO
+                  </button>
                 </div>
               </div>
-            </motion.div>
+
+              {/* 2 Small Images (Green Box) */}
+              <div className="flex flex-col gap-3">
+                <div className="rounded-xl overflow-hidden border border-slate-700 h-28 shadow-lg">
+                  <img src={cricketFielding} alt="fielding" className="w-full h-full object-cover" />
+                </div>
+                <div className="rounded-xl overflow-hidden border border-slate-700 h-28 shadow-lg">
+                  <img src={cricketAction} alt="pitch" className="w-full h-full object-cover" />
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* ========================================================== */}
+          {/* 2. DESKTOP ONLY (Aapka original preferred desktop layout) */}
+          {/* ========================================================== */}
+          <div className="hidden sm:block pt-14 pb-20">
+            <div className="max-w-6xl mx-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                {/* Left Content */}
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.6 }}
+                >
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight mb-4 sm:mb-6">
+                    {t.uploadYour}
+                    <br />
+                    {t.cricketVideo}
+                    <br />
+                    <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">{t.getCoach}</span>
+                  </h1>
+
+                  <p className="text-sm sm:text-base md:text-lg text-gray-300 mb-6 sm:mb-8">
+                    {t.heroDescription}
+                  </p>
+
+                  {/* Trust Badge */}
+                  <div className="mb-8 inline-flex items-center gap-2 bg-slate-800/50 border border-slate-700 rounded-full px-4 py-2">
+                    <span className="text-green-400 font-bold">✓</span>
+                    <span className="text-sm text-gray-300">Made for the Next Generation of Cricketers</span>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 mb-8">
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="inline-flex items-center gap-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                        <Zap className="w-3 h-3" /> {t.limitedOffer}
+                      </span>
+                      <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="w-full sm:w-auto"
+                      >
+                        <Link to="/register" className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 bg-[image:var(--primary-gradient)] hover:opacity-90 text-white font-bold text-xs sm:text-sm rounded transition text-center shadow-lg hover:shadow-xl relative overflow-hidden group block">
+                          <span className="relative z-10">{t.registerBtn}</span>
+                          <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
+                        </Link>
+                      </motion.div>
+                    </div>
+                    <motion.button 
+                      onClick={() => setShowDemoModal(true)}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 border-2 border-purple-500 text-purple-400 hover:bg-purple-500/10 font-bold text-xs sm:text-sm rounded transition flex items-center justify-center gap-2 group"
+                    >
+                      <Play className="w-4 h-4" />
+                      {t.watchDemo}
+                    </motion.button>
+                  </div>
+                </motion.div>
+
+                {/* Right - Product Mockup */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.2 }}
+                  className="relative"
+                >
+                  <div className="rounded-2xl overflow-hidden border-4 border-slate-700" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
+                    <img
+                      src={cricketBatting}
+                      alt="Cricket batting"
+                      className="w-full h-48 sm:h-64 lg:h-96 object-cover object-top"
+                    />
+                  </div>
+
+                  <div className="mt-4 hidden sm:flex gap-4">
+                    <div className="flex-1 rounded-2xl overflow-hidden border-4 border-slate-700 h-20 sm:h-24" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
+                      <img
+                        src={cricketFielding}
+                        alt="Cricket fielding"
+                        className="w-full h-full object-cover object-center"
+                      />
+                    </div>
+                    <div className="flex-1 rounded-2xl overflow-hidden border-4 border-slate-700 h-20 sm:h-24" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}>
+                      <img
+                        src={cricketAction}
+                        alt="Cricket action"
+                        className="w-full h-full object-cover object-center"
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
