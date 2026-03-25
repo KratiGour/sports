@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Play, Download, Clock, Filter } from 'lucide-react';
-import { videosApi } from '../lib/api';
+import { resolveMediaUrl, videosApi } from '../lib/api';
 
 interface VideoDetail {
   id: string;
@@ -41,7 +41,15 @@ export default function VideoDetailPage() {
   const [loading, setLoading] = useState(true);
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
 
+  const needsPolling = (item: VideoDetail | null): boolean => {
+    if (!item) return false;
+    const status = String(item.status || '').toLowerCase();
+    return status === 'processing' || status === 'pending' || (status === 'completed' && !item.supercut_path);
+  };
+
   useEffect(() => {
+    let pollTimer: number | undefined;
+
     const loadVideo = async () => {
       if (!videoId) return;
       setLoading(true);
@@ -50,8 +58,33 @@ export default function VideoDetailPage() {
           videosApi.getById(videoId),
           videosApi.getEvents(videoId),
         ]);
-        setVideo(videoResponse.data);
+        const videoData = videoResponse.data as VideoDetail;
+        setVideo(videoData);
         setEvents(eventsResponse.data.events || []);
+
+        if (needsPolling(videoData)) {
+          pollTimer = window.setInterval(async () => {
+            try {
+              const latestVideoResponse = await videosApi.getById(videoId);
+              const latestVideo = latestVideoResponse.data as VideoDetail;
+              setVideo(latestVideo);
+
+              if (latestVideo.total_events > 0 || String(latestVideo.status || '').toLowerCase() === 'completed') {
+                const latestEvents = await videosApi.getEvents(
+                  videoId,
+                  eventFilter === 'all' ? undefined : eventFilter,
+                );
+                setEvents(latestEvents.data.events || []);
+              }
+
+              if (!needsPolling(latestVideo) && pollTimer !== undefined) {
+                window.clearInterval(pollTimer);
+              }
+            } catch (pollError) {
+              console.error('Polling video details failed:', pollError);
+            }
+          }, 10000);
+        }
       } catch (error) {
         console.error('Failed to fetch video details:', error);
       } finally {
@@ -59,7 +92,18 @@ export default function VideoDetailPage() {
       }
     };
     loadVideo();
-  }, [videoId]);
+
+    return () => {
+      if (pollTimer !== undefined) {
+        window.clearInterval(pollTimer);
+      }
+    };
+  }, [videoId, eventFilter]);
+
+  const getSupercutPlaybackUrl = (item: VideoDetail): string => {
+    if (!item.supercut_path) return videosApi.getSupercutUrl(item.id);
+    return resolveMediaUrl(item.supercut_path);
+  };
 
 
 
@@ -144,9 +188,9 @@ export default function VideoDetailPage() {
               className="w-full h-full"
               controls
               preload="metadata"
-              src={videosApi.getSupercutUrl(video.id)}
+              src={getSupercutPlaybackUrl(video)}
             >
-              <source src={videosApi.getSupercutUrl(video.id)} type="video/mp4" />
+              <source src={getSupercutPlaybackUrl(video)} type="video/mp4" />
               Your browser does not support the video tag.
             </video>
           ) : video.status === 'completed' ? (
@@ -191,7 +235,7 @@ export default function VideoDetailPage() {
             {/* Download Supercut Button */}
             {video.supercut_path && (
               <a
-                href={videosApi.getSupercutUrl(video.id)}
+                href={getSupercutPlaybackUrl(video)}
                 download={`${video.title}_highlights.mp4`}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
               >
