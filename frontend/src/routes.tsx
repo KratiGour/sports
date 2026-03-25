@@ -29,6 +29,9 @@ import SubscriptionPage from './pages/SubscriptionPage';
 import CoachPendingPage from './pages/CoachPendingPage';
 import CoachVerificationPage from './pages/CoachVerificationPage';
 import FeaturesDetailPage from './pages/FeaturesDetailPage';
+import StatsPage from './pages/PlayerStatsPage';
+import MatchesPage from './pages/MatchesPage';
+import NotificationsPage from './pages/NotificationsPage';
 
 // Auth Initializer (runs once on module load) 
 let authInitialized = false;
@@ -159,6 +162,9 @@ export default function AppRouter() {
             <Route path="/video/:videoId" element={<VideoDetailPage />} />
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/settings" element={<ProfilePage />} />
+            <Route path="/stats" element={<StatsPage />} />
+            <Route path="/matches" element={<MatchesPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/player" element={<PlayerDashboard />} />
             <Route path="/player/:id" element={<PlayerPerformance />} />
             <Route path="/player/bowling" element={<BowlingAnalysisPage />} />
