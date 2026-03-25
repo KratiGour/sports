@@ -122,7 +122,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
               <i className="fas fa-cricket-bat-ball text-white"></i>
             </div>
-            <span className="font-bold text-xl text-white">SportVision</span>
+            <span className="font-bold text-xl text-white">PitchVision</span>
           </div>
           <motion.button
             whileTap={{ scale: 0.95 }}
@@ -151,7 +151,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               <div>
                 <span className={`font-bold text-lg ${
                   theme === 'dark' ? 'text-white' : 'text-gray-900'
-                }`}>SportVision</span>
+                }`}>PitchVision</span>
                 <p className={`text-xs ${
                   theme === 'dark' ? 'text-white/50' : 'text-gray-500'
                 }`}>AI Analytics</p>
@@ -322,7 +322,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
                     <i className="fas fa-cricket-bat-ball text-white"></i>
                   </div>
                   <div>
-                    <span className="font-bold text-lg text-white">SportVision</span>
+                    <span className="font-bold text-lg text-white">PitchVision</span>
                     <p className="text-xs text-white/50">AI Analytics</p>
                   </div>
                 </div>
