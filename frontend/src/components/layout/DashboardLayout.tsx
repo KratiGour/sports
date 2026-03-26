@@ -3,6 +3,8 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore } from "../../store/themeStore";
+import Logo from '../../gallery/logo.webp';
+
 
 // Navigation items configuration
 interface NavItem {
@@ -119,9 +121,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
       <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass border-b border-white/10">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-              <i className="fas fa-cricket-bat-ball text-white"></i>
-            </div>
+<img src={Logo} alt="PitchVision" className="w-10 h-10 rounded-xl object-contain" />
             <span className="font-bold text-xl text-white">PitchVision</span>
           </div>
           <motion.button
@@ -145,9 +145,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
             <div className={`flex items-center gap-3 p-6 border-b ${
               theme === 'dark' ? 'border-white/10' : 'border-gray-200'
             }`}>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center pulse-glow">
-                <i className="fas fa-cricket-bat-ball text-white"></i>
-              </div>
+<img src={Logo} alt="PitchVision" className="w-10 h-10 rounded-xl object-contain pulse-glow" />
               <div>
                 <span className={`font-bold text-lg ${
                   theme === 'dark' ? 'text-white' : 'text-gray-900'
@@ -318,9 +316,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               <div className="h-full flex flex-col">
                 {/* Mobile Logo */}
                 <div className="flex items-center gap-3 p-6 border-b border-white/10">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-                    <i className="fas fa-cricket-bat-ball text-white"></i>
-                  </div>
+<img src={Logo} alt="PitchVision" className="w-10 h-10 rounded-xl object-contain" />
                   <div>
                     <span className="font-bold text-lg text-white">PitchVision</span>
                     <p className="text-xs text-white/50">AI Analytics</p>
