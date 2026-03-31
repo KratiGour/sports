@@ -32,7 +32,6 @@ export interface User {
   intro_video_url?: string;
   profile_image_url?: string;
   coach_category?: string;
-  session_type?: string;
 }
 
 interface AuthState {

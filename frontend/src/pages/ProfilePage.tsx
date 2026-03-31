@@ -29,7 +29,6 @@ export default function ProfilePage() {
     bio: userProfile?.profile_bio || '',
     gender: userProfile?.gender || '',
     coachCategory: userProfile?.coach_category || '',
-    sessionType: userProfile?.session_type || '',
   });
 
   // Coach-specific fields
@@ -119,7 +118,6 @@ export default function ProfilePage() {
         updateData.certifications = certifications;
         updateData.specialization = specialization;
         updateData.coach_category = formData.coachCategory;
-        updateData.session_type = formData.sessionType;
       }
 
       await authApi.updateProfile(updateData);
@@ -443,31 +441,6 @@ export default function ProfilePage() {
               ) : (
                 <p className="text-white glass rounded-xl px-4 py-3 border border-white/10">
                   {formData.coachCategory || 'Not provided'}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Session Type - Only for COACH role */}
-          {isCoach && (
-            <div>
-              <label className="block text-sm font-medium text-white/60 mb-2">
-                <i className="fas fa-map-marker-alt mr-1"></i> Session Type
-              </label>
-              {isEditing ? (
-                <select
-                  value={formData.sessionType}
-                  onChange={(e) => setFormData({ ...formData, sessionType: e.target.value })}
-                  className="w-full px-4 py-3 glass border border-white/20 rounded-xl text-white focus:outline-none focus:border-blue-500 bg-transparent"
-                >
-                  <option value="" className="bg-gray-800">Select Session Type</option>
-                  <option value="Virtual" className="bg-gray-800">Virtual Only</option>
-                  <option value="In-Field" className="bg-gray-800">In-Field Only</option>
-                  <option value="Both" className="bg-gray-800">Both (Virtual & In-Field)</option>
-                </select>
-              ) : (
-                <p className="text-white glass rounded-xl px-4 py-3 border border-white/10">
-                  {formData.sessionType || 'Not provided'}
                 </p>
               )}
             </div>

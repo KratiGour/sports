@@ -126,6 +126,23 @@ class UserProfileResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Profile Update Request
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    profile_bio: Optional[str] = None
+    gender: Optional[str] = None
+    jersey_number: Optional[int] = None
+    team: Optional[str] = None
+    certifications: Optional[list] = None
+    specialization: Optional[list] = None
+    intro_video_url: Optional[str] = None
+    profile_image_url: Optional[str] = None
+    coach_category: Optional[str] = None
+
+    model_config = ConfigDict(extra='ignore')
+
+
 # Password Reset Schemas
 class PasswordResetRequest(BaseModel):
     email: EmailStr

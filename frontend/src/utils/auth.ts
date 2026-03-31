@@ -25,7 +25,6 @@ interface UserProfile {
   intro_video_url?: string;
   profile_image_url?: string;
   coach_category?: string;
-  session_type?: string;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
