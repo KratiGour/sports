@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useThemeStore } from "../store/themeStore";
+
 import {
   LineChart,
   Line,
@@ -124,7 +125,7 @@ export default function CoachDashboard() {
 
           <div className="flex gap-3">
             <Link
-              to="/coach/upload"
+              to="/upload"
               className={`px-4 py-2 rounded-xl border transition-all duration-300 text-sm flex items-center gap-2 ${
                 theme === 'dark'
                   ? 'glass border-white/20 hover:bg-white/10'
@@ -449,7 +450,7 @@ export default function CoachDashboard() {
           {myAthletes.map((athlete, i) => (
             <Link
               key={i}
-              to={`/coach/player/${athlete.id}`}
+              to={`/coach/players`}
               className="block"
             >
               <motion.div
