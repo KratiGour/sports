@@ -33,6 +33,7 @@ const dashboardItems: Record<string, NavItem[]> = {
     { to: "/coach", icon: "fas fa-home", label: "Dashboard" },
     { to: "/settings", icon: "fas fa-user-circle", label: "My Profile" },
     { to: "/coach/submissions", icon: "fas fa-inbox", label: "Video Reviews" },
+    { to: "/library", icon: "fas fa-video", label: "Library" },
   ],
  ADMIN: [
   { to: "/admin", icon: "fas fa-home", label: "Dashboard" },
