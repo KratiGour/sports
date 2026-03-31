@@ -125,7 +125,7 @@ export default function CoachDashboard() {
 
           <div className="flex gap-3">
             <Link
-              to="/upload"
+              to="/coach/upload"
               className={`px-4 py-2 rounded-xl border transition-all duration-300 text-sm flex items-center gap-2 ${
                 theme === 'dark'
                   ? 'glass border-white/20 hover:bg-white/10'

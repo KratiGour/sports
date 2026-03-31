@@ -32,17 +32,7 @@ const dashboardItems: Record<string, NavItem[]> = {
   COACH: [
     { to: "/coach", icon: "fas fa-home", label: "Dashboard" },
     { to: "/settings", icon: "fas fa-user-circle", label: "My Profile" },
-    { to: "/coach/players", icon: "fas fa-users", label: "My Players" },
     { to: "/coach/submissions", icon: "fas fa-inbox", label: "Video Reviews" },
-    { to: "/coach/sessions", icon: "fas fa-calendar-alt", label: "Sessions" },
-    { to: "/coach/availability", icon: "fas fa-clock", label: "Availability" },
-    { to: "/coach/training-plans", icon: "fas fa-book-open", label: "Training Plans" },
-    { to: "/coach/inbox", icon: "fas fa-envelope", label: "Inbox" },
-    { to: "/coach/analytics", icon: "fas fa-chart-line", label: "Analytics" },
-    { to: "/coach/reviews", icon: "fas fa-star", label: "Reviews" },
-    { to: "/coach/earnings", icon: "fas fa-dollar-sign", label: "Earnings" },
-    { to: "/coach/content", icon: "fas fa-bullhorn", label: "My Content" },
-    { to: "/coach/settings", icon: "fas fa-cog", label: "Settings" },
   ],
  ADMIN: [
   { to: "/admin", icon: "fas fa-home", label: "Dashboard" },

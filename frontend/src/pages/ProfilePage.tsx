@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { authService } from '../utils/auth';
 import { authApi } from '../lib/api';
@@ -14,12 +14,9 @@ interface Certification {
 export default function ProfilePage() {
   const userProfile = authService.getUserProfile();
   const isCoach = userProfile?.role === 'COACH';
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const profileImageInputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [profileComplete, setProfileComplete] = useState(0);
-  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: userProfile?.name || '',
     email: userProfile?.email || '',
@@ -34,7 +31,6 @@ export default function ProfilePage() {
   // Coach-specific fields
   const [certifications, setCertifications] = useState<Certification[]>([]);
   const [specialization, setSpecialization] = useState<string[]>([]);
-  const [introVideo, setIntroVideo] = useState<File | null>(null);
 
   // Load coach branding data on mount
   useEffect(() => {
@@ -59,10 +55,10 @@ export default function ProfilePage() {
     // Coach branding (60%)
     if (certifications.length > 0) complete += 20;
     if (specialization.length > 0) complete += 20;
-    if (introVideo || userProfile?.intro_video_url) complete += 20;
+    if (userProfile?.intro_video_url) complete += 20;
     
     setProfileComplete(complete);
-  }, [isCoach, formData, certifications, specialization, introVideo, userProfile]);
+  }, [isCoach, formData, certifications, specialization, userProfile]);
 
   const toggleSpecialization = (spec: string) => {
     setSpecialization(prev => 
@@ -82,24 +78,6 @@ export default function ProfilePage() {
 
   const removeCertification = (index: number) => {
     setCertifications(certifications.filter((_, i) => i !== index));
-  };
-
-  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setIntroVideo(file);
-    }
-  };
-
-  const handleProfileImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfileImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   const handleSave = async () => {
@@ -179,9 +157,9 @@ export default function ProfilePage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Profile Image */}
                 <div className="rounded-xl p-4 glass border border-white/10 flex flex-col items-center justify-center">
-                  {profileImagePreview || userProfile?.profile_image_url ? (
+                  {userProfile?.profile_image_url ? (
                     <img 
-                      src={profileImagePreview || userProfile?.profile_image_url} 
+                      src={userProfile?.profile_image_url} 
                       alt="Profile" 
                       className="w-24 h-24 rounded-2xl object-cover mb-2"
                     />
@@ -249,7 +227,7 @@ export default function ProfilePage() {
                     <span>Add certifications</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
-                    <i className={`fas ${introVideo || userProfile?.intro_video_url ? 'fa-check-circle text-green-400' : 'fa-circle text-white/20'}`}></i>
+                    <i className={`fas ${userProfile?.intro_video_url ? 'fa-check-circle text-green-400' : 'fa-circle text-white/20'}`}></i>
                     <span>Upload intro video</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
@@ -316,9 +294,9 @@ export default function ProfilePage() {
         {/* Avatar */}
         <div className="flex items-center gap-6 mb-8">
           <div className="relative">
-            {profileImagePreview || userProfile?.profile_image_url ? (
+            {userProfile?.profile_image_url ? (
               <img 
-                src={profileImagePreview || userProfile?.profile_image_url} 
+                src={userProfile?.profile_image_url} 
                 alt="Profile" 
                 className="w-20 h-20 rounded-2xl object-cover"
               />
@@ -327,23 +305,6 @@ export default function ProfilePage() {
                 {formData.name?.charAt(0)?.toUpperCase() || 'U'}
               </div>
             )}
-            {isEditing && (
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => profileImageInputRef.current?.click()}
-                className="absolute -bottom-1 -right-1 w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xs shadow-lg"
-              >
-                <i className="fas fa-camera"></i>
-              </motion.button>
-            )}
-            <input
-              ref={profileImageInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/jpg,image/webp"
-              className="hidden"
-              onChange={handleProfileImageSelect}
-            />
           </div>
           <div>
             <p className="text-xl font-semibold">{formData.name}</p>
@@ -622,54 +583,11 @@ export default function ProfilePage() {
             {/* Intro Video */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-white/60 mb-3">
-                <i className="fas fa-video mr-1"></i> Intro Video
+                <i className="fas fa-video mr-1"></i> Intro Video URL
               </label>
-              
-              {introVideo ? (
-                <div className="glass rounded-xl p-4 border border-white/10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-                        <i className="fas fa-video text-white"></i>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{introVideo.name}</p>
-                        <p className="text-xs text-white/50">{(introVideo.size / 1024 / 1024).toFixed(2)} MB</p>
-                      </div>
-                    </div>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setIntroVideo(null)}
-                      className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-all"
-                    >
-                      <i className="fas fa-times mr-1"></i>
-                      Remove
-                    </motion.button>
-                  </div>
-                </div>
-              ) : (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => videoInputRef.current?.click()}
-                  className="w-full py-8 glass rounded-xl border-2 border-dashed border-white/20 hover:border-purple-400 transition-all flex flex-col items-center gap-3 text-white/60 hover:text-purple-400"
-                >
-                  <i className="fas fa-cloud-upload-alt text-4xl"></i>
-                  <div className="text-center">
-                    <p className="text-sm font-medium">Upload Intro Video</p>
-                    <p className="text-xs mt-1">MP4, MOV, WebM • Max 100MB</p>
-                  </div>
-                </motion.button>
-              )}
-              
-              <input
-                ref={videoInputRef}
-                type="file"
-                accept="video/mp4,video/quicktime,video/webm"
-                className="hidden"
-                onChange={handleVideoSelect}
-              />
+              <p className="text-sm text-white/60 glass rounded-xl px-4 py-3 border border-white/10">
+                {userProfile?.intro_video_url || 'No intro video added yet'}
+              </p>
             </div>
           </div>
         </motion.div>
