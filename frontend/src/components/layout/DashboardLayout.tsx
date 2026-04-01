@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore } from "../../store/themeStore";
-import Logo from '../../gallery/logo.webp';
+import logoImage from '/logo.webp';
 
 
 // Navigation items configuration
@@ -32,15 +32,14 @@ const dashboardItems: Record<string, NavItem[]> = {
   ],
   COACH: [
     { to: "/coach", icon: "fas fa-home", label: "Dashboard" },
-    { to: "/coach/upload", icon: "fas fa-cloud-upload-alt", label: "Upload" },
-    { to: "/coach/submissions", icon: "fas fa-inbox", label: "Inbox" },
+    { to: "/settings", icon: "fas fa-user-circle", label: "My Profile" },
+    { to: "/coach/submissions", icon: "fas fa-inbox", label: "Video Reviews" },
     { to: "/library", icon: "fas fa-video", label: "Library" },
-    { to: "/requests", icon: "fas fa-comment-dots", label: "Requests" },
-    { to: "/settings", icon: "fas fa-cog", label: "Settings" },
   ],
  ADMIN: [
   { to: "/admin", icon: "fas fa-home", label: "Dashboard" },
   { to: "/admin/upload", icon: "fas fa-cloud-upload-alt", label: "Upload" },
+  { to: "/admin/users", icon: "fas fa-users", label: "User Management" },
   { to: "/admin/coaches", icon: "fas fa-user-check", label: "Coach Approvals" },
   { to: "/admin/plans", icon: "fas fa-tags", label: "Plans" },
   { to: "/library", icon: "fas fa-video", label: "Library" },
@@ -121,7 +120,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
       <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass border-b border-white/10">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
-<img src={Logo} alt="PitchVision" className="w-10 h-10 rounded-xl object-contain" />
+            <img src={logoImage} alt="PitchVision" className="w-14 h-14 rounded-xl object-contain" />
             <span className="font-bold text-xl text-white">PitchVision</span>
           </div>
           <motion.button
@@ -145,7 +144,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
             <div className={`flex items-center gap-3 p-6 border-b ${
               theme === 'dark' ? 'border-white/10' : 'border-gray-200'
             }`}>
-<img src={Logo} alt="PitchVision" className="w-10 h-10 rounded-xl object-contain pulse-glow" />
+              <img src={logoImage} alt="PitchVision" className="w-14 h-14 rounded-xl object-contain" />
               <div>
                 <span className={`font-bold text-lg ${
                   theme === 'dark' ? 'text-white' : 'text-gray-900'
@@ -316,7 +315,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               <div className="h-full flex flex-col">
                 {/* Mobile Logo */}
                 <div className="flex items-center gap-3 p-6 border-b border-white/10">
-<img src={Logo} alt="PitchVision" className="w-10 h-10 rounded-xl object-contain" />
+                  <img src={logoImage} alt="PitchVision" className="w-14 h-14 rounded-xl object-contain" />
                   <div>
                     <span className="font-bold text-lg text-white">PitchVision</span>
                     <p className="text-xs text-white/50">AI Analytics</p>

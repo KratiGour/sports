@@ -19,6 +19,7 @@ aiofiles>=23.2.1             # Async file operations
 # Database & ORM
 sqlalchemy>=2.0.23
 psycopg2-binary>=2.9.9       # PostgreSQL driver
+alembic>=1.18.0              # Database migrations
 
 # Authentication & Security
 email-validator>=2.0.0

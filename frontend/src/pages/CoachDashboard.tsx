@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useThemeStore } from "../store/themeStore";
+
 import {
   LineChart,
   Line,
@@ -449,7 +450,7 @@ export default function CoachDashboard() {
           {myAthletes.map((athlete, i) => (
             <Link
               key={i}
-              to={`/coach/player/${athlete.id}`}
+              to={`/coach/players`}
               className="block"
             >
               <motion.div

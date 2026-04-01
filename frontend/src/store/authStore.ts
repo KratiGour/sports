@@ -20,10 +20,18 @@ export interface User {
   phone?: string;
   team?: string;
   profile_bio?: string;
+  gender?: string;
   jersey_number?: number;
   is_verified: boolean;
   created_at: string;
   last_login?: string;
+  
+  // Coach profile fields
+  certifications?: Array<{name: string; issuer: string; year: string}>;
+  specialization?: string[];
+  intro_video_url?: string;
+  profile_image_url?: string;
+  coach_category?: string;
 }
 
 interface AuthState {

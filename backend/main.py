@@ -240,6 +240,9 @@ app.include_router(admin_coaches.router, prefix="/api/v1", tags=["admin"])
 app.include_router(plan.router, prefix="/api/v1", tags=["admin"])
 app.include_router(subscription.router, prefix="/api/v1", tags=["subscriptions"])
 
+from api.routes import admin as admin_users
+app.include_router(admin_users.router, prefix="/api/v1", tags=["admin"])
+
 
 # Video management routes
 app.include_router(videos.router, prefix="/api/v1", tags=["videos"])

@@ -14,6 +14,7 @@ import PlayerDashboard from './pages/PlayerDashboard';
 import CoachDashboard from './pages/CoachDashboard';
 import AdminPlansPage from './pages/AdminPlansPage';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminUsersPage from './pages/AdminUsersPage';
 import UploadPage from './pages/UploadPage';
 import HighlightsPage from './pages/HighlightsPage';
 import VideoDetailPage from './pages/VideoDetailPage';
@@ -195,6 +196,7 @@ export default function AppRouter() {
               <Route path="/admin/upload" element={<UploadPage />} />
               <Route path="/admin/coaches" element={<CoachVerificationPage />} />
               <Route path="/admin/plans" element={<AdminPlansPage />} />
+              <Route path="/admin/users" element={<AdminUsersPage />} />
             </Route>
           </Route>
         </Route>

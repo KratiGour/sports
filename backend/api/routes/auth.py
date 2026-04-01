@@ -14,7 +14,7 @@ from pathlib import Path
 from database.config import get_db
 from database.models.user import User
 from database.models.session import UserSession
-from schemas.auth import UserCreate, UserLogin, Token, UserResponse, TokenResponse
+from schemas.auth import UserCreate, UserLogin, Token, UserResponse, TokenResponse, ProfileUpdateRequest
 from utils.auth import (
     create_refresh_token,
     get_password_hash,
@@ -187,18 +187,16 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
 
 @router.put("/me", response_model=UserResponse)
 def update_current_user(
-    name: str | None = None,
-    team: str | None = None,
-    jersey_number: int | None = None,
+    update_data: ProfileUpdateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if name is not None:
-        current_user.name = name
-    if team is not None:
-        current_user.team = team
-    if jersey_number is not None:
-        current_user.jersey_number = jersey_number
+    # Update only provided fields
+    update_dict = update_data.model_dump(exclude_unset=True)
+    
+    for field, value in update_dict.items():
+        if hasattr(current_user, field):
+            setattr(current_user, field, value)
 
     db.commit()
     db.refresh(current_user)
