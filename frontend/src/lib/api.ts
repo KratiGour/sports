@@ -592,4 +592,18 @@ export const subscriptionApi = {
 
 };
 
+// Admin API
+export const adminApi = {
+  // Get admin stats
+  getStats: () => api.get('/admin/stats'),
+  
+  // Get pending coach verifications
+  getPendingCoaches: (limit = 5) => 
+    api.get('/admin/coaches/pending', { params: { limit } }),
+  
+  // Verify coach (approve/reject)
+  verifyCoach: (coachId: string, action: 'verified' | 'rejected') => 
+    api.patch(`/admin/coaches/${coachId}/verify`, null, { params: { action } }),
+};
+
 export default api;

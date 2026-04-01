@@ -13,7 +13,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { videosApi, requestsApi } from '../lib/api';
+import { videosApi, requestsApi, adminApi } from '../lib/api';
 import { useUser } from '../store/authStore';
 
 interface DashboardStats {
@@ -21,6 +21,7 @@ interface DashboardStats {
   pendingJobs: number;
   pendingRequests: number;
   totalUsers: number;
+  pendingCoaches: number;
 }
 
 interface PendingRequest {
@@ -32,6 +33,16 @@ interface PendingRequest {
   created_at: string;
 }
 
+interface PendingCoach {
+  id: string;
+  name: string;
+  email: string;
+  team?: string;
+  specialization?: string[];
+  certifications?: Array<{name: string; issuer: string; year: string}>;
+  created_at: string;
+}
+
 export default function AdminDashboard() {
   const user = useUser();
   const [stats, setStats] = useState<DashboardStats>({
@@ -39,8 +50,10 @@ export default function AdminDashboard() {
     pendingJobs: 0,
     pendingRequests: 0,
     totalUsers: 0,
+    pendingCoaches: 0,
   });
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  const [pendingCoaches, setPendingCoaches] = useState<PendingCoach[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Static chart data
@@ -63,9 +76,9 @@ export default function AdminDashboard() {
 
   const statCards = useMemo(() => [
     { title: "Total Videos", value: stats.totalVideos.toString(), icon: "fas fa-video", color: "from-blue-500 to-cyan-500", change: "+8%" },
-    { title: "Pending Jobs", value: stats.pendingJobs.toString(), icon: "fas fa-clock", color: "from-yellow-500 to-orange-500", change: "Processing" },
+    { title: "Pending Coaches", value: stats.pendingCoaches.toString(), icon: "fas fa-user-clock", color: "from-green-500 to-emerald-500", change: "Needs Review" },
     { title: "Pending Requests", value: stats.pendingRequests.toString(), icon: "fas fa-inbox", color: "from-purple-500 to-pink-500", change: "Needs Review" },
-    { title: "System Status", value: "99.9%", icon: "fas fa-server", color: "from-green-500 to-emerald-500", change: "Healthy" },
+    { title: "System Status", value: "99.9%", icon: "fas fa-server", color: "from-yellow-500 to-orange-500", change: "Healthy" },
   ], [stats]);
 
   useEffect(() => {
@@ -90,21 +103,36 @@ export default function AdminDashboard() {
       const token = localStorage.getItem('access_token');
       if (!token) return;
 
-      const videosResponse = await videosApi.listAll({ page: 1, per_page: 1 });
-      const requestsResponse = await requestsApi.adminDashboard(1, 10);
+      const [videosResponse, requestsResponse, statsResponse, coachesResponse] = await Promise.all([
+        videosApi.listAll({ page: 1, per_page: 1 }),
+        requestsApi.adminDashboard(1, 10),
+        adminApi.getStats(),
+        adminApi.getPendingCoaches(5),
+      ]);
       
       setStats({
         totalVideos: videosResponse.data.total || 0,
         pendingJobs: 0,
         pendingRequests: requestsResponse.data.total || 0,
-        totalUsers: 0,
+        totalUsers: statsResponse.data.total_users || 0,
+        pendingCoaches: statsResponse.data.pending_coaches || 0,
       });
       
       setPendingRequests(requestsResponse.data.requests || []);
+      setPendingCoaches(coachesResponse.data.coaches || []);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCoachAction = async (coachId: string, action: 'verified' | 'rejected') => {
+    try {
+      await adminApi.verifyCoach(coachId, action);
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Failed to update coach:', error);
     }
   };
 
@@ -298,13 +326,100 @@ export default function AdminDashboard() {
         </motion.div>
       </div>
 
-      {/* Pending Requests */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="glass rounded-3xl p-6 border border-white/20"
-      >
+      {/* Bottom Row - Pending Items */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Coach Verification Queue */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="glass rounded-3xl p-6 border border-white/20"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center text-xl">
+                <i className="fas fa-user-check text-white"></i>
+              </div>
+              <div>
+                <p className="font-semibold text-lg">Coach Verification Queue</p>
+                <p className="text-sm text-white/60">Pending coach applications</p>
+              </div>
+            </div>
+            <Link to="/admin/coaches" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+              View all →
+            </Link>
+          </div>
+
+          {pendingCoaches.length === 0 ? (
+            <div className="text-center py-12">
+              <i className="fas fa-check-circle text-4xl text-green-400 mb-4"></i>
+              <p className="text-white/60">No pending verifications</p>
+              <p className="text-sm text-white/40 mt-1">All coaches verified!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingCoaches.map((coach, i) => (
+                <motion.div
+                  key={coach.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  className="glass rounded-2xl p-4 border border-white/10 hover:border-white/20 transition-all duration-300"
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-green-400 to-emerald-500 flex items-center justify-center text-white font-bold">
+                        {coach.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium">{coach.name}</p>
+                        <p className="text-xs text-white/50">
+                          {coach.email} {coach.team && `• ${coach.team}`}
+                        </p>
+                        {coach.specialization && coach.specialization.length > 0 && (
+                          <div className="flex gap-1 mt-1">
+                            {coach.specialization.slice(0, 2).map((spec, idx) => (
+                              <span key={idx} className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
+                                {spec}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleCoachAction(coach.id, 'verified')}
+                        className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-medium rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all"
+                      >
+                        <i className="fas fa-check mr-1"></i> Approve
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleCoachAction(coach.id, 'rejected')}
+                        className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-medium rounded-lg hover:from-red-600 hover:to-red-700 transition-all"
+                      >
+                        <i className="fas fa-times mr-1"></i> Reject
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+
+        {/* Pending Requests */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="glass rounded-3xl p-6 border border-white/20"
+        >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-center text-xl">
@@ -374,7 +489,8 @@ export default function AdminDashboard() {
             ))}
           </div>
         )}
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 }

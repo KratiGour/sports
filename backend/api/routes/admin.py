@@ -153,6 +153,10 @@ def get_admin_stats(
     total_coaches = db.query(func.count(User.id)).filter(User.role == 'COACH').scalar()
     total_admins = db.query(func.count(User.id)).filter(User.role == 'ADMIN').scalar()
     active_users = db.query(func.count(User.id)).filter(User.is_active == True).scalar()
+    pending_coaches = db.query(func.count(User.id)).filter(
+        User.role == 'COACH',
+        User.coach_status == 'pending'
+    ).scalar()
     
     return {
         "total_users": total_users,
@@ -160,5 +164,51 @@ def get_admin_stats(
         "total_coaches": total_coaches,
         "total_admins": total_admins,
         "active_users": active_users,
-        "inactive_users": total_users - active_users
+        "inactive_users": total_users - active_users,
+        "pending_coaches": pending_coaches
     }
+
+
+@router.get("/coaches/pending")
+def get_pending_coaches(
+    limit: int = Query(5, ge=1, le=20),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get pending coach verification applications"""
+    
+    coaches = db.query(User).filter(
+        User.role == 'COACH',
+        User.coach_status == 'pending'
+    ).order_by(User.created_at.asc()).limit(limit).all()
+    
+    return {"coaches": coaches}
+
+
+@router.patch("/coaches/{coach_id}/verify")
+def verify_coach(
+    coach_id: str,
+    action: str = Query(..., regex="^(verified|rejected)$"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Approve or reject coach verification"""
+    
+    coach = db.query(User).filter(
+        User.id == coach_id,
+        User.role == 'COACH'
+    ).first()
+    
+    if not coach:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Coach not found"
+        )
+    
+    coach.coach_status = action
+    db.commit()
+    db.refresh(coach)
+    
+    logger.info(f"Coach {coach.email} {action} by admin {current_user.email}")
+    
+    return coach
