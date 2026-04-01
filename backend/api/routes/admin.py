@@ -158,6 +158,14 @@ def get_admin_stats(
         User.coach_status == 'pending'
     ).scalar()
     
+    # Subscription breakdown
+    basic_users = db.query(func.count(User.id)).filter(User.subscription_plan == 'BASIC').scalar()
+    silver_users = db.query(func.count(User.id)).filter(User.subscription_plan == 'SILVER').scalar()
+    gold_users = db.query(func.count(User.id)).filter(User.subscription_plan == 'GOLD').scalar()
+    
+    # Revenue calculation (mock pricing: BASIC=0, SILVER=29, GOLD=99)
+    monthly_revenue = (silver_users * 29) + (gold_users * 99)
+    
     return {
         "total_users": total_users,
         "total_players": total_players,
@@ -165,7 +173,16 @@ def get_admin_stats(
         "total_admins": total_admins,
         "active_users": active_users,
         "inactive_users": total_users - active_users,
-        "pending_coaches": pending_coaches
+        "pending_coaches": pending_coaches,
+        "subscription_breakdown": {
+            "basic": basic_users,
+            "silver": silver_users,
+            "gold": gold_users
+        },
+        "revenue": {
+            "monthly": monthly_revenue,
+            "yearly": monthly_revenue * 12
+        }
     }
 
 

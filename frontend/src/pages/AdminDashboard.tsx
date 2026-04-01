@@ -22,6 +22,15 @@ interface DashboardStats {
   pendingRequests: number;
   totalUsers: number;
   pendingCoaches: number;
+  subscription_breakdown?: {
+    basic: number;
+    silver: number;
+    gold: number;
+  };
+  revenue?: {
+    monthly: number;
+    yearly: number;
+  };
 }
 
 interface PendingRequest {
@@ -58,21 +67,20 @@ export default function AdminDashboard() {
 
   // Static chart data
   const userGrowth = useMemo(() => [
-    { month: "Jan", users: 120, videos: 45 },
-    { month: "Feb", users: 145, videos: 52 },
-    { month: "Mar", users: 168, videos: 61 },
-    { month: "Apr", users: 192, videos: 78 },
-    { month: "May", users: 218, videos: 89 },
-    { month: "Jun", users: 245, videos: 102 },
-    { month: "Jul", users: 284, videos: 156 },
+    { month: "Jan", users: 120, videos: 45, revenue: 2340 },
+    { month: "Feb", users: 145, videos: 52, revenue: 2890 },
+    { month: "Mar", users: 168, videos: 61, revenue: 3420 },
+    { month: "Apr", users: 192, videos: 78, revenue: 4180 },
+    { month: "May", users: 218, videos: 89, revenue: 4950 },
+    { month: "Jun", users: 245, videos: 102, revenue: 5680 },
+    { month: "Jul", users: 284, videos: 156, revenue: 6890 },
   ], []);
 
-  const requestsData = useMemo(() => [
-    { name: "Pending", value: stats.pendingRequests || 5, color: "#F59E0B" },
-    { name: "Approved", value: 12, color: "#10B981" },
-    { name: "Rejected", value: 3, color: "#EF4444" },
-    { name: "Completed", value: 25, color: "#3B82F6" },
-  ], [stats.pendingRequests]);
+  const subscriptionData = useMemo(() => [
+    { name: "Basic", value: stats.subscription_breakdown?.basic || 0, color: "#6B7280" },
+    { name: "Silver", value: stats.subscription_breakdown?.silver || 0, color: "#C0C0C0" },
+    { name: "Gold", value: stats.subscription_breakdown?.gold || 0, color: "#FFD700" },
+  ], [stats.subscription_breakdown]);
 
   const statCards = useMemo(() => [
     { title: "Total Videos", value: stats.totalVideos.toString(), icon: "fas fa-video", color: "from-blue-500 to-cyan-500", change: "+8%" },
@@ -237,20 +245,26 @@ export default function AdminDashboard() {
 
       {/* Charts Row */}
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
-        {/* User Growth Chart */}
+        {/* Revenue Trends */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6 }}
           className="lg:col-span-2 glass rounded-3xl p-6 border border-white/20 hover:border-white/30 transition-all duration-300"
         >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center">
-              <i className="fas fa-chart-line text-white"></i>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center">
+                <i className="fas fa-dollar-sign text-white"></i>
+              </div>
+              <div>
+                <p className="font-semibold">Revenue Trends</p>
+                <p className="text-sm text-white/60">Monthly recurring revenue growth</p>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold">Platform Growth</p>
-              <p className="text-sm text-white/60">Monthly users and video uploads</p>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-green-400">${stats.revenue?.monthly.toLocaleString() || 0}</p>
+              <p className="text-xs text-white/60">MRR</p>
             </div>
           </div>
 
@@ -268,14 +282,14 @@ export default function AdminDashboard() {
                     color: 'white'
                   }}
                 />
-                <Line type="monotone" dataKey="users" stroke="#3B82F6" strokeWidth={3} name="Users" />
-                <Line type="monotone" dataKey="videos" stroke="#10B981" strokeWidth={3} name="Videos" />
+                <Line type="monotone" dataKey="revenue" stroke="#10B981" strokeWidth={3} name="Revenue ($)" />
+                <Line type="monotone" dataKey="users" stroke="#3B82F6" strokeWidth={2} name="Users" />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </motion.div>
 
-        {/* Request Status Pie */}
+        {/* Subscription Breakdown */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -283,12 +297,12 @@ export default function AdminDashboard() {
           className="glass rounded-3xl p-6 border border-white/20 hover:border-white/30 transition-all duration-300"
         >
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-              <i className="fas fa-chart-pie text-white"></i>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 flex items-center justify-center">
+              <i className="fas fa-crown text-white"></i>
             </div>
             <div>
-              <p className="font-semibold">Request Status</p>
-              <p className="text-sm text-white/60">Current distribution</p>
+              <p className="font-semibold">Subscription Plans</p>
+              <p className="text-sm text-white/60">Active subscribers</p>
             </div>
           </div>
 
@@ -296,14 +310,14 @@ export default function AdminDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={requestsData}
+                  data={subscriptionData}
                   cx="50%"
                   cy="50%"
                   innerRadius={40}
                   outerRadius={80}
                   dataKey="value"
                 >
-                  {requestsData.map((entry, index) => (
+                  {subscriptionData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -312,17 +326,113 @@ export default function AdminDashboard() {
             </ResponsiveContainer>
           </div>
 
-          <div className="space-y-2">
-            {requestsData.map((item, i) => (
-              <div key={i} className="flex items-center justify-between text-xs">
+          <div className="space-y-3">
+            {subscriptionData.map((item, i) => (
+              <div key={i} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                  <span>{item.name}</span>
+                  <span className="text-sm">{item.name}</span>
                 </div>
-                <span className="text-white/60">{item.value}</span>
+                <div className="text-right">
+                  <span className="font-semibold">{item.value}</span>
+                  <span className="text-xs text-white/60 ml-2">
+                    {stats.totalUsers > 0 ? Math.round((item.value / stats.totalUsers) * 100) : 0}%
+                  </span>
+                </div>
               </div>
             ))}
           </div>
+
+          {/* Revenue Summary */}
+          <div className="mt-6 pt-4 border-t border-white/10">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-white/60">Monthly Revenue</span>
+              <span className="font-semibold text-green-400">${stats.revenue?.monthly.toLocaleString() || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-white/60">Yearly Projection</span>
+              <span className="font-semibold text-blue-400">${stats.revenue?.yearly.toLocaleString() || 0}</span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Metrics Cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="glass rounded-2xl p-6 border border-white/20"
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+              <i className="fas fa-users text-white"></i>
+            </div>
+            <span className="text-sm text-white/60">Total Users</span>
+          </div>
+          <p className="text-3xl font-bold">{stats.totalUsers}</p>
+          <p className="text-xs text-green-400 mt-1">↑ 12% this month</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="glass rounded-2xl p-6 border border-white/20"
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-yellow-500 to-orange-500 flex items-center justify-center">
+              <i className="fas fa-star text-white"></i>
+            </div>
+            <span className="text-sm text-white/60">Premium Users</span>
+          </div>
+          <p className="text-3xl font-bold">
+            {(stats.subscription_breakdown?.silver || 0) + (stats.subscription_breakdown?.gold || 0)}
+          </p>
+          <p className="text-xs text-green-400 mt-1">↑ 8% conversion</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="glass rounded-2xl p-6 border border-white/20"
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-red-500 to-pink-500 flex items-center justify-center">
+              <i className="fas fa-chart-line text-white"></i>
+            </div>
+            <span className="text-sm text-white/60">Churn Rate</span>
+          </div>
+          <p className="text-3xl font-bold">2.3%</p>
+          <p className="text-xs text-green-400 mt-1">↓ 0.5% improvement</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="glass rounded-2xl p-6 border border-white/20"
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center">
+              <i className="fas fa-trophy text-white"></i>
+            </div>
+            <span className="text-sm text-white/60">Popular Plan</span>
+          </div>
+          <p className="text-2xl font-bold">
+            {Math.max(
+              stats.subscription_breakdown?.basic || 0,
+              stats.subscription_breakdown?.silver || 0,
+              stats.subscription_breakdown?.gold || 0
+            ) === (stats.subscription_breakdown?.gold || 0) ? 'Gold' :
+            Math.max(
+              stats.subscription_breakdown?.basic || 0,
+              stats.subscription_breakdown?.silver || 0
+            ) === (stats.subscription_breakdown?.silver || 0) ? 'Silver' : 'Basic'}
+          </p>
+          <p className="text-xs text-white/60 mt-1">Most subscribed</p>
         </motion.div>
       </div>
 
