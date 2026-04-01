@@ -202,7 +202,80 @@ def get_pending_coaches(
     return {"coaches": coaches}
 
 
+@router.get("/activity")
+def get_activity_feed(
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get recent activity feed for admin dashboard"""
+    
+    activities = []
+    
+    # Recent registrations (last 7 days)
+    recent_users = db.query(User).order_by(User.created_at.desc()).limit(10).all()
+    for user in recent_users:
+        activities.append({
+            "id": f"user_{user.id}",
+            "type": "registration",
+            "title": f"New {user.role.lower()} registered",
+            "description": f"{user.name} ({user.email})",
+            "timestamp": user.created_at.isoformat() if user.created_at else None,
+            "icon": "user-plus",
+            "color": "blue"
+        })
+    
+    # Recent coach applications
+    pending_coaches = db.query(User).filter(
+        User.role == 'COACH',
+        User.coach_status == 'pending'
+    ).order_by(User.created_at.desc()).limit(5).all()
+    
+    for coach in pending_coaches:
+        activities.append({
+            "id": f"coach_{coach.id}",
+            "type": "coach_application",
+            "title": "New coach application",
+            "description": f"{coach.name} applied for verification",
+            "timestamp": coach.created_at.isoformat() if coach.created_at else None,
+            "icon": "user-check",
+            "color": "green"
+        })
+    
+    # Sort by timestamp and limit
+    activities.sort(key=lambda x: x['timestamp'] or '', reverse=True)
+    activities = activities[:limit]
+    
+    return {"activities": activities, "total": len(activities)}
+
+
 @router.patch("/coaches/{coach_id}/verify")
+def verify_coach(
+    coach_id: str,
+    action: str = Query(..., regex="^(verified|rejected)$"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Approve or reject coach verification"""
+    
+    coach = db.query(User).filter(
+        User.id == coach_id,
+        User.role == 'COACH'
+    ).first()
+    
+    if not coach:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Coach not found"
+        )
+    
+    coach.coach_status = action
+    db.commit()
+    db.refresh(coach)
+    
+    logger.info(f"Coach {coach.email} {action} by admin {current_user.email}")
+    
+    return coach
 def verify_coach(
     coach_id: str,
     action: str = Query(..., regex="^(verified|rejected)$"),

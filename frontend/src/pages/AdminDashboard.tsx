@@ -52,6 +52,16 @@ interface PendingCoach {
   created_at: string;
 }
 
+interface ActivityItem {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  timestamp: string;
+  icon: string;
+  color: string;
+}
+
 export default function AdminDashboard() {
   const user = useUser();
   const [stats, setStats] = useState<DashboardStats>({
@@ -63,6 +73,7 @@ export default function AdminDashboard() {
   });
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [pendingCoaches, setPendingCoaches] = useState<PendingCoach[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Static chart data
@@ -111,11 +122,12 @@ export default function AdminDashboard() {
       const token = localStorage.getItem('access_token');
       if (!token) return;
 
-      const [videosResponse, requestsResponse, statsResponse, coachesResponse] = await Promise.all([
+      const [videosResponse, requestsResponse, statsResponse, coachesResponse, activityResponse] = await Promise.all([
         videosApi.listAll({ page: 1, per_page: 1 }),
         requestsApi.adminDashboard(1, 10),
         adminApi.getStats(),
         adminApi.getPendingCoaches(5),
+        adminApi.getActivityFeed(15),
       ]);
       
       setStats({
@@ -128,6 +140,7 @@ export default function AdminDashboard() {
       
       setPendingRequests(requestsResponse.data.requests || []);
       setPendingCoaches(coachesResponse.data.coaches || []);
+      setActivities(activityResponse.data.activities || []);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     } finally {
@@ -151,6 +164,41 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Failed to update request:', error);
     }
+  };
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'registration': return 'fa-user-plus';
+      case 'coach_application': return 'fa-user-check';
+      case 'upload': return 'fa-cloud-upload-alt';
+      case 'system': return 'fa-cog';
+      default: return 'fa-bell';
+    }
+  };
+
+  const getActivityColor = (color: string) => {
+    switch (color) {
+      case 'blue': return 'from-blue-500 to-cyan-500';
+      case 'green': return 'from-green-500 to-emerald-500';
+      case 'purple': return 'from-purple-500 to-pink-500';
+      case 'orange': return 'from-orange-500 to-red-500';
+      default: return 'from-gray-500 to-gray-600';
+    }
+  };
+
+  const formatTimeAgo = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return formatDate(dateStr);
   };
 
   const formatDate = (dateStr: string) => {
@@ -436,8 +484,8 @@ export default function AdminDashboard() {
         </motion.div>
       </div>
 
-      {/* Bottom Row - Pending Items */}
-      <div className="grid lg:grid-cols-2 gap-6">
+      {/* Bottom Row - Pending Items & Activity Feed */}
+      <div className="grid lg:grid-cols-3 gap-6">
         {/* Coach Verification Queue */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -599,6 +647,56 @@ export default function AdminDashboard() {
             ))}
           </div>
         )}
+        </motion.div>
+
+        {/* Activity Feed */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="glass rounded-3xl p-6 border border-white/20"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-xl">
+                <i className="fas fa-stream text-white"></i>
+              </div>
+              <div>
+                <p className="font-semibold text-lg">Activity Feed</p>
+                <p className="text-sm text-white/60">Recent system events</p>
+              </div>
+            </div>
+          </div>
+
+          {activities.length === 0 ? (
+            <div className="text-center py-12">
+              <i className="fas fa-inbox text-4xl text-white/20 mb-4"></i>
+              <p className="text-white/60">No recent activity</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[500px] overflow-y-auto">
+              {activities.map((activity, i) => (
+                <motion.div
+                  key={activity.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="glass rounded-xl p-3 border border-white/10 hover:border-white/20 transition-all duration-300"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-r ${getActivityColor(activity.color)} flex items-center justify-center flex-shrink-0`}>
+                      <i className={`fas ${getActivityIcon(activity.type)} text-white text-xs`}></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{activity.title}</p>
+                      <p className="text-xs text-white/50 truncate">{activity.description}</p>
+                      <p className="text-xs text-white/40 mt-1">{formatTimeAgo(activity.timestamp)}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </motion.div>
       </div>
     </div>

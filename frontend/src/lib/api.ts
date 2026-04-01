@@ -604,6 +604,10 @@ export const adminApi = {
   // Verify coach (approve/reject)
   verifyCoach: (coachId: string, action: 'verified' | 'rejected') => 
     api.patch(`/admin/coaches/${coachId}/verify`, null, { params: { action } }),
+  
+  // Get activity feed
+  getActivityFeed: (limit = 20) => 
+    api.get('/admin/activity', { params: { limit } }),
 };
 
 export default api;
