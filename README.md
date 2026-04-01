@@ -4,7 +4,7 @@ A full-stack cloud-native web application that analyzes cricket videos, detects 
 
 **Status:** ✅ Production-Ready | GCP Cloud-Native | Full-Stack
 
----
+--- 
 
 ## 🎯 Features
 - 📹 **Upload & Analyze** - Upload cricket match videos or player clips.
