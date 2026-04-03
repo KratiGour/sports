@@ -45,8 +45,8 @@ def _build_postgres_engines(url: str):
     primary = create_engine(
         url,
         poolclass=QueuePool,
-        pool_pre_ping=True,
-        pool_recycle=1800,
+        pool_pre_ping=True,  # Test connections before using
+        pool_recycle=300,  # Recycle connections every 5 minutes (was 30 min)
         pool_size=5,
         max_overflow=10,
         pool_timeout=30,
