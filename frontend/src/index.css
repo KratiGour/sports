@@ -163,3 +163,21 @@ input:focus, select:focus, textarea:focus {
 .light-theme .bg-white\/10 {
   background-color: rgb(243 244 246) !important;
 }
+
+/* Animated gradient background */
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient 8s ease infinite;
+}

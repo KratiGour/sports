@@ -48,26 +48,56 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
         )
 
-    # Handle coach document upload
+    # Handle coach document upload with validation
     coach_document_url = None
     if coach_document and role == 'COACH':
-        # Create storage directory if it doesn't exist
-        storage_dir = Path("storage/coach_documents")
-        storage_dir.mkdir(parents=True, exist_ok=True)
+        # Validate file extension
+        ALLOWED_EXTENSIONS = {'.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'}
+        file_extension = os.path.splitext(coach_document.filename)[1].lower()
         
-        # Generate unique filename
-        file_extension = os.path.splitext(coach_document.filename)[1]
-        unique_filename = f"{secrets.token_urlsafe(16)}{file_extension}"
-        file_path = storage_dir / unique_filename
+        if file_extension not in ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            )
         
-        # Save file
-        with open(file_path, "wb") as buffer:
+        # Read and validate file size (max 10MB)
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+        try:
             content = await coach_document.read()
-            buffer.write(content)
-        
-        # Store full path (not URL)
-        coach_document_url = str(file_path)
-        logger.info(f"Coach document uploaded: {coach_document_url}")
+            
+            if len(content) > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="File too large. Maximum size is 10MB."
+                )
+            
+            # Create storage directory if it doesn't exist
+            storage_dir = Path("storage/coach_documents")
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate unique filename
+            unique_filename = f"{secrets.token_urlsafe(16)}{file_extension}"
+            file_path = storage_dir / unique_filename
+            
+            # Save file with error handling
+            with open(file_path, "wb") as buffer:
+                buffer.write(content)
+            
+            # Store relative path (not full system path)
+            coach_document_url = f"coach_documents/{unique_filename}"
+            logger.info(f"Coach document uploaded: {coach_document_url}")
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Coach document upload failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to upload document. Please try again."
+            )
+        finally:
+            await coach_document.close()
 
     # Create new user
     hashed_password = get_password_hash(password)
@@ -124,10 +154,6 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
     # Create access token
     access_token_expires = timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-
-    # Create access token
-    access_token_expires = timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email, "role": user.role}, expires_delta=access_token_expires
     )
@@ -169,14 +195,23 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
 def logout(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    # Delete all active sessions for this user
-    db.query(UserSession).filter(
-        UserSession.user_id == current_user.id).delete()
-    db.commit()
-
-    logger.info(
-        f"User logged out: {current_user.email} (ID: {current_user.id})")
-
+    # Cache user info BEFORE database operations (prevents lazy loading after commit)
+    user_email = current_user.email
+    user_id = current_user.id
+    
+    try:
+        # Delete all active sessions for this user
+        db.query(UserSession).filter(
+            UserSession.user_id == user_id).delete()
+        db.commit()
+        
+        logger.info(f"User logged out: {user_email} (ID: {user_id})")
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Logout error for user {user_id}: {e}")
+        # Don't fail logout even if session cleanup fails
+        
     return None
 
 

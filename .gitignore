@@ -126,3 +126,5 @@ Thumbs.db
 
 # GitHub 
 .github/
+.vercel
+.env*.local

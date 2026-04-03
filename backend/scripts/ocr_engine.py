@@ -17,6 +17,9 @@ import json
 import logging
 import argparse
 import subprocess
+import time
+import tempfile
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from pathlib import Path
 from typing import Iterator, List, Dict, Optional, Tuple
@@ -29,6 +32,333 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# OPTIMIZATION CLASSES - Added for Performance ImprovementS
+class VideoPreprocessor:
+    """Handles FFmpeg preprocessing: downscaling and FPS reduction."""
+    
+    @staticmethod
+    def preprocess_video(input_path: str, output_path: str, target_height: int = 720, target_fps: int = 15) -> str:
+        """
+        Preprocess video using FFmpeg: downscale to 720p and reduce FPS.
+        
+        Args:
+            input_path: Path to source video
+            output_path: Path for preprocessed output
+            target_height: Target height (width auto-calculated)
+            target_fps: Target FPS (10-15 recommended)
+            
+        Returns:
+            Path to preprocessed video
+        """
+        logger.info(f"Preprocessing video: {target_height}p @ {target_fps}fps")
+        start_time = time.time()
+        
+        cmd = [
+            'ffmpeg', '-hide_banner', '-loglevel', 'error',
+            '-i', input_path,
+            '-vf', f'scale=-2:{target_height},fps={target_fps}',
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+            '-an',  # Remove audio (not needed for OCR)
+            '-y', output_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True)
+        
+        if result.returncode != 0:
+            logger.error(f"FFmpeg preprocessing failed: {result.stderr.decode()}")
+            return input_path  # Fallback to original
+        
+        elapsed = time.time() - start_time
+        logger.info(f"Preprocessing complete: {elapsed:.1f}s")
+        return output_path
+
+
+class VideoChunker:
+    """Split video into logical chunks for parallel processing."""
+    
+    def __init__(self, chunk_duration_sec: int = 600):
+        """
+        Args:
+            chunk_duration_sec: Duration of each chunk in seconds (default: 600 = 10 minutes)
+        """
+        self.chunk_duration = chunk_duration_sec
+    
+    def create_chunks(self, video_path: str, start_time: float = 0.0) -> List[Dict]:
+        """
+        Create logical chunks without actual file splitting.
+        
+        Args:
+            video_path: Path to video file
+            start_time: Start time offset (for resuming processing)
+            
+        Returns:
+            List of chunk metadata dicts with start/end times
+        """
+        duration = self._get_video_duration(video_path)
+        
+        if duration is None:
+            logger.warning("Could not determine video duration, using single chunk")
+            return [{
+                'chunk_id': 0,
+                'start_time': start_time,
+                'end_time': start_time + 3600,  # Assume 1 hour
+                'video_path': video_path
+            }]
+        
+        # Calculate chunks with overlap for boundary events
+        overlap = 30  # 30 second overlap between chunks
+        num_chunks = int(np.ceil((duration - start_time) / self.chunk_duration))
+        
+        chunks = []
+        for i in range(num_chunks):
+            chunk_start = start_time + (i * self.chunk_duration)
+            chunk_end = min(chunk_start + self.chunk_duration + overlap, duration)
+            
+            if chunk_start >= duration:
+                break
+                
+            chunks.append({
+                'chunk_id': i,
+                'start_time': chunk_start,
+                'end_time': chunk_end,
+                'duration': chunk_end - chunk_start,
+                'video_path': video_path
+            })
+        
+        logger.info(f"Split video into {len(chunks)} chunks ({self.chunk_duration}s each)")
+        return chunks
+    
+    @staticmethod
+    def _get_video_duration(video_path: str) -> Optional[float]:
+        """Get video duration in seconds using FFprobe."""
+        cmd = [
+            'ffprobe', '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            video_path
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0:
+                return float(result.stdout.strip())
+        except (ValueError, subprocess.SubprocessError) as e:
+            logger.warning(f"Could not determine duration: {e}")
+        return None
+
+
+class AudioSpikeDetector:
+    """Lightweight audio analysis to detect crowd noise spikes."""
+    
+    def __init__(self, threshold: float = 0.7):
+        """
+        Args:
+            threshold: Audio spike detection threshold (0-1)
+        """
+        self.threshold = threshold
+    
+    def detect_audio_spikes(self, video_path: str, start_time: float, end_time: float) -> List[float]:
+        """
+        Detect audio spikes (crowd noise) in video segment.
+        
+        Args:
+            video_path: Path to video file
+            start_time: Segment start time
+            end_time: Segment end time
+            
+        Returns:
+            List of timestamps with detected audio spikes
+        """
+        logger.debug(f"Analyzing audio: {start_time:.1f}s - {end_time:.1f}s")
+        
+        # Extract audio using FFmpeg and analyze volume
+        cmd = [
+            'ffmpeg', '-hide_banner', '-loglevel', 'error',
+            '-ss', str(start_time),
+            '-t', str(end_time - start_time),
+            '-i', video_path,
+            '-af', 'volumedetect',
+            '-f', 'null', '-'
+        ]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            
+            # This is a simplified version - could be enhanced with librosa
+            spikes = []
+            
+            # In production, use proper audio analysis library (librosa, scipy)
+            # This is a placeholder that returns potential event times
+            duration = end_time - start_time
+            sample_interval = 10  # Check every 10 seconds
+            
+            for offset in range(0, int(duration), sample_interval):
+                timestamp = start_time + offset
+                spikes.append(timestamp)
+            
+            return spikes
+            
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Audio analysis timeout: {start_time:.1f}s - {end_time:.1f}s")
+            return []
+
+
+class MotionDetector:
+    """Simple motion detection in scoreboard region."""
+    
+    def __init__(self, threshold: int = 25):
+        """
+        Args:
+            threshold: Motion detection sensitivity (lower = more sensitive)
+        """
+        self.threshold = threshold
+        self.prev_frame = None
+    
+    def detect_motion(self, frame: np.ndarray, roi_coords: Tuple[int, int, int, int]) -> bool:
+        """
+        Detect motion in ROI using frame differencing.
+        
+        Args:
+            frame: Current video frame
+            roi_coords: (x, y, width, height) of ROI
+            
+        Returns:
+            True if significant motion detected
+        """
+        x, y, w, h = roi_coords
+        roi = frame[y:y+h, x:x+w]
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        
+        if self.prev_frame is None:
+            self.prev_frame = gray
+            return True  # First frame always has "motion"
+        
+        # Calculate frame difference
+        diff = cv2.absdiff(self.prev_frame, gray)
+        _, thresh = cv2.threshold(diff, self.threshold, 255, cv2.THRESH_BINARY)
+        motion_pixels = np.sum(thresh) / 255
+        motion_percentage = motion_pixels / (w * h)
+        
+        self.prev_frame = gray
+        
+        # Detect if more than 5% of pixels changed
+        return motion_percentage > 0.05
+    
+    def reset(self):
+        """Reset detector state (call between chunks)."""
+        self.prev_frame = None
+
+
+class FrameChangeDetector:
+    """Detect when scoreboard ROI has changed to skip redundant OCR."""
+    
+    def __init__(self, similarity_threshold: float = 0.95):
+        """
+        Args:
+            similarity_threshold: Histogram correlation threshold (0-1)
+        """
+        self.threshold = similarity_threshold
+        self.last_roi_hist = None
+        self.frames_since_change = 0
+        self.force_ocr_interval = 10  
+    
+    def has_changed(self, roi: np.ndarray) -> bool:
+        """
+        Check if ROI has changed significantly since last check.
+        
+        Args:
+            roi: Current ROI image
+            
+        Returns:
+            True if ROI has changed and OCR should run
+        """
+        self.frames_since_change += 1
+        
+        # Force OCR periodically to avoid drift
+        if self.frames_since_change >= self.force_ocr_interval:
+            self.frames_since_change = 0
+            self.last_roi_hist = None
+            return True
+        
+        # Calculate histogram for comparison
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
+        cv2.normalize(hist, hist)
+        
+        if self.last_roi_hist is None:
+            self.last_roi_hist = hist
+            return True
+        
+        # Compare histograms
+        similarity = cv2.compareHist(self.last_roi_hist, hist, cv2.HISTCMP_CORREL)
+        
+        if similarity < self.threshold:
+            self.last_roi_hist = hist
+            self.frames_since_change = 0
+            return True
+        
+        return False
+    
+    def reset(self):
+        """Reset detector state (call between chunks)."""
+        self.last_roi_hist = None
+        self.frames_since_change = 0
+
+
+class PerformanceLogger:
+    """Track and log performance metrics."""
+    
+    def __init__(self):
+        self.chunk_times = []
+        self.total_frames = 0
+        self.ocr_calls = 0
+        self.skipped_frames = 0
+        self.start_time = None
+    
+    def start_pipeline(self):
+        """Mark pipeline start."""
+        self.start_time = time.time()
+        logger.info("=" * 60)
+        logger.info("OPTIMIZED PIPELINE STARTING")
+        logger.info("=" * 60)
+    
+    def log_chunk_start(self, chunk_id: int, start_time: float, end_time: float):
+        """Log chunk processing start."""
+        logger.info(f"Chunk {chunk_id}: {start_time:.1f}s - {end_time:.1f}s ({end_time - start_time:.1f}s duration)")
+    
+    def log_chunk_complete(self, chunk_id: int, elapsed: float, frames: int, ocr_calls: int, events: int):
+        """Log chunk completion with metrics."""
+        self.chunk_times.append(elapsed)
+        self.total_frames += frames
+        self.ocr_calls += ocr_calls
+        
+        throughput = frames / elapsed if elapsed > 0 else 0
+        ocr_rate = (ocr_calls / frames * 100) if frames > 0 else 0
+        
+        logger.info(f"Chunk {chunk_id} complete: {elapsed:.1f}s | "
+                   f"{frames} frames | {ocr_calls} OCR calls ({ocr_rate:.1f}%) | "
+                   f"{events} events | {throughput:.1f} fps")
+    
+    def log_pipeline_complete(self, total_events: int):
+        """Log final pipeline metrics."""
+        if self.start_time is None:
+            return
+        
+        total_time = time.time() - self.start_time
+        avg_chunk_time = np.mean(self.chunk_times) if self.chunk_times else 0
+        skip_rate = (self.skipped_frames / max(self.total_frames, 1)) * 100
+        
+        logger.info("=" * 60)
+        logger.info("PIPELINE COMPLETE")
+        logger.info(f"Total Time: {total_time:.1f}s ({total_time/60:.1f} min)")
+        logger.info(f"Total Frames: {self.total_frames}")
+        logger.info(f"OCR Calls: {self.ocr_calls}")
+        logger.info(f"Skipped Frames: {self.skipped_frames} ({skip_rate:.1f}%)")
+        logger.info(f"Total Events: {total_events}")
+        logger.info(f"Chunks Processed: {len(self.chunk_times)}")
+        logger.info(f"Avg Chunk Time: {avg_chunk_time:.1f}s")
+        logger.info(f"Overall Throughput: {self.total_frames / total_time:.1f} fps")
+        logger.info("=" * 60)
 
 # CONFIGURATION
 class ScoreboardConfig:
@@ -222,10 +552,10 @@ def parse_batsmen_details(text: str) -> Tuple[Optional[BatsmanState], Optional[B
         if runs1 <= 300 and balls1 <= 200 and runs2 <= 300 and balls2 <= 200:
             b1 = BatsmanState(name1, runs1, balls1)
             b2 = BatsmanState(name2, runs2, balls2)
-            logger.debug(f"   📊 Parsed batsmen: {b1} | {b2}")
+            logger.debug(f"   Parsed batsmen: {b1} | {b2}")
             return b1, b2
     
-    logger.debug(f"   ⚠️  Could not parse batsmen from: '{text}'")
+    logger.debug(f"   Could not parse batsmen from: '{text}'")
     return None, None
 
 
@@ -660,7 +990,7 @@ class OCRScoreReader:
             return 'Unknown'
             
         except Exception as e:
-            logger.warning(f"⚠️  Batsman name OCR error at {timestamp:.1f}s: {e}")
+            logger.warning(f"Batsman name OCR error at {timestamp:.1f}s: {e}")
             return 'Unknown'
 
     def extract_bowler_name_roi(self, frame, debug_path: Optional[str] = None) -> Optional[any]:
@@ -758,7 +1088,7 @@ class OCRScoreReader:
             return 'Unknown'
             
         except Exception as e:
-            logger.warning(f"⚠️  Bowler name OCR error at {timestamp:.1f}s: {e}")
+            logger.warning(f"Bowler name OCR error at {timestamp:.1f}s: {e}")
             return 'Unknown'
 
     def read_score(self, roi_image, min_confidence: float = 0.4, prev_wickets: Optional[int] = None) -> Tuple[Optional[ScoreState], float, str]:
@@ -979,7 +1309,7 @@ class EventDetector:
             event = self._detect_boundary(self.last_stable_score, stable, timestamp)
 
         if event:
-            emoji = {'WICKET': '🏏', 'FOUR': '🎯', 'SIX': '🚀'}.get(event['type'], '⚡')
+            emoji = {'WICKET': 'W', 'FOUR': '4', 'SIX': '6'}.get(event['type'], '*')
             over_str = f" (Over: {overs[0]}.{overs[1]})" if overs else ""
             logger.info(f"[{self._format_time(timestamp)}] {emoji} {event['type']}: "
                        f"{self.last_stable_score} → {stable}{over_str}")
@@ -1087,7 +1417,7 @@ def auto_calibrate_roi(video_path: str, sample_timestamps: List[float] = None, u
             
             # Check for score pattern
             if score_pattern.match(clean_text):
-                logger.info(f"   ✅ Found score: '{text}' at ({x1}, {y1}) conf={confidence:.2f}")
+                logger.info(f"   Found score: '{text}' at ({x1}, {y1}) conf={confidence:.2f}")
                 score_detections.append({
                     'x': x1, 'y': y1, 'width': x2 - x1, 'height': y2 - y1,
                     'confidence': confidence, 'text': text, 'timestamp': ts
@@ -1095,7 +1425,7 @@ def auto_calibrate_roi(video_path: str, sample_timestamps: List[float] = None, u
             
             # Check for overs pattern
             elif overs_pattern.match(clean_text):
-                logger.info(f"   ✅ Found overs: '{text}' at ({x1}, {y1}) conf={confidence:.2f}")
+                logger.info(f"   Found overs: '{text}' at ({x1}, {y1}) conf={confidence:.2f}")
                 overs_detections.append({
                     'x': x1, 'y': y1, 'width': x2 - x1, 'height': y2 - y1,
                     'confidence': confidence, 'text': text
@@ -1119,7 +1449,7 @@ def auto_calibrate_roi(video_path: str, sample_timestamps: List[float] = None, u
     video.release()
     
     if not score_detections:
-        logger.warning("❌ Could not detect score region automatically")
+        logger.warning("Could not detect score region automatically")
         logger.warning("   Try running with --visualize to manually check frame layout")
         return None
     
@@ -1198,7 +1528,7 @@ def auto_calibrate_roi(video_path: str, sample_timestamps: List[float] = None, u
     
     # If no name found, estimate position (right of score, same Y)
     if batsman_roi is None:
-        logger.info("   ⚠️  No batsman names detected - using estimated position")
+        logger.info("   No batsman names detected - using estimated position")
         batsman_roi = {
             'x': score_roi['x'] + score_roi['width'] + 20,
             'y': score_roi['y'],  # Same Y as score
@@ -1223,13 +1553,13 @@ def auto_calibrate_roi(video_path: str, sample_timestamps: List[float] = None, u
     }
     
     logger.info("-" * 60)
-    logger.info("✅ AUTO-CALIBRATION COMPLETE")
+    logger.info("AUTO-CALIBRATION COMPLETE")
     logger.info(f"   Score ROI: ({score_roi['x']}, {score_roi['y']}) {score_roi['width']}x{score_roi['height']}")
     logger.info(f"   Overs ROI: ({overs_roi['x']}, {overs_roi['y']}) {overs_roi['width']}x{overs_roi['height']}")
     logger.info(f"   Batsman ROI: ({batsman_roi['x']}, {batsman_roi['y']}) {batsman_roi['width']}x{batsman_roi['height']}")
     logger.info(f"   Detection confidence: {best_score['confidence']:.2f}")
     if suggested_start is not None:
-        logger.info(f"   ⏱️  Suggested --start-time: {suggested_start}s (match content detected at {earliest_ts:.0f}s)")
+        logger.info(f"   Suggested --start-time: {suggested_start}s (match content detected at {earliest_ts:.0f}s)")
     
     return result
 
@@ -1282,9 +1612,9 @@ def visualize_roi(video_path: str, config: ScoreboardConfig, timestamp: float = 
 
     # Validate ROI bounds
     if score_y + score_h > height or score_x + score_w > width:
-        logger.warning(f"⚠️  Score ROI partially outside frame bounds! Frame: {width}x{height}")
+        logger.warning(f"Score ROI partially outside frame bounds! Frame: {width}x{height}")
     if overs_y + overs_h > height or overs_x + overs_w > width:
-        logger.warning(f"⚠️  Overs ROI partially outside frame bounds! Frame: {width}x{height}")
+        logger.warning(f"Overs ROI partially outside frame bounds! Frame: {width}x{height}")
 
     # Draw Score ROI (green)
     pt1_score = (score_x, score_y)
@@ -1306,7 +1636,7 @@ def visualize_roi(video_path: str, config: ScoreboardConfig, timestamp: float = 
         cv2.putText(frame, "BATSMAN", (batsman_x, max(10, batsman_y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
         logger.info(f"Batsman ROI: ({batsman_x}, {batsman_y}) to ({batsman_x + batsman_w}, {batsman_y + batsman_h})")
     else:
-        logger.warning("⚠️  Batsman Name ROI not configured (x=0, y=0). Set --batsman-roi-x/y to enable player attribution.")
+        logger.warning("Batsman Name ROI not configured (x=0, y=0). Set --batsman-roi-x/y to enable player attribution.")
 
     # Draw Bowler Name ROI (magenta/pink) - only if configured
     if config.bowler_roi_x > 0 or config.bowler_roi_y > 0:
@@ -1325,7 +1655,7 @@ def visualize_roi(video_path: str, config: ScoreboardConfig, timestamp: float = 
 
     output_path = "roi_check.jpg"
     cv2.imwrite(output_path, frame)
-    logger.info(f"✅ Saved: {output_path}")
+    logger.info(f"Saved: {output_path}")
     logger.info(f"   Green box (SCORE): ({score_x}, {score_y}) {score_w}x{score_h}")
     logger.info(f"   Blue box (OVERS):  ({overs_x}, {overs_y}) {overs_w}x{overs_h}")
     if config.batsman_roi_x > 0 or config.batsman_roi_y > 0:
@@ -1335,10 +1665,330 @@ def visualize_roi(video_path: str, config: ScoreboardConfig, timestamp: float = 
     return output_path
 
 
+def process_video_optimized(video_path: str, config: ScoreboardConfig,
+                           sample_interval: float = 1.0,
+                           min_confidence: float = 0.4,
+                           auto_parallel: bool = True) -> List[Dict]:
+    """
+    Smart wrapper that auto-selects optimal processing mode.
+    
+    For large videos (>1 hour): Use parallel processing
+    For small videos (<1 hour): Use sequential processing
+    
+    Args:
+        video_path: Path to video file
+        config: Scoreboard configuration
+        sample_interval: Frame sampling interval
+        min_confidence: OCR confidence threshold
+        auto_parallel: Auto-select parallel mode for large videos
+        
+    Returns:
+        List of detected events
+    """
+    # Get video duration
+    duration = VideoChunker._get_video_duration(video_path)
+    
+    if duration is None:
+        logger.warning("Could not determine video duration, using sequential mode")
+        return process_video(video_path, config, sample_interval, None, False, min_confidence)
+    
+    # Use parallel processing for videos > 1 hour
+    if auto_parallel and duration > 3600:
+        logger.info(f"Video duration: {duration/3600:.1f}h - Using PARALLEL mode")
+        return process_video_parallel(
+            video_path, config,
+            sample_interval=sample_interval,
+            min_confidence=min_confidence,
+            num_workers=4,
+            chunk_duration=600,
+            preprocess=True,
+            use_optimization=True
+        )
+    else:
+        logger.info(f"Video duration: {duration/60:.1f}min - Using SEQUENTIAL mode")
+        return process_video(video_path, config, sample_interval, None, False, min_confidence)
+
+# OPTIMIZED PARALLEL PROCESSING FUNCTIONS
+def process_chunk_worker(chunk: Dict, config: ScoreboardConfig, 
+                        sample_interval: float, min_confidence: float,
+                        use_optimization: bool = True) -> Tuple[List[Dict], Dict]:
+    """
+    Worker function to process a single video chunk.
+    Designed to be called by ProcessPoolExecutor.
+    
+    Args:
+        chunk: Chunk metadata (start_time, end_time, video_path)
+        config: Scoreboard configuration
+        sample_interval: Frame sampling interval
+        min_confidence: OCR confidence threshold
+        use_optimization: Enable frame change detection
+        
+    Returns:
+        Tuple of (events_list, metrics_dict)
+    """
+    chunk_id = chunk['chunk_id']
+    start_time = chunk['start_time']
+    end_time = chunk['end_time']
+    video_path = chunk['video_path']
+    
+    chunk_start_clock = time.time()
+    
+    logger.info(f"Chunk {chunk_id}: Processing {start_time:.1f}s - {end_time:.1f}s")
+    
+    # Initialize detectors
+    reader = OCRScoreReader(config, use_gpu=config.use_gpu)
+    detector = EventDetector()
+    change_detector = FrameChangeDetector() if use_optimization else None
+    
+    events = []
+    stats = {'success': 0, 'fail': 0, 'skipped': 0, 'ocr_calls': 0}
+    last_valid_score = None
+    candidate_score, candidate_count = None, 0
+    
+    # Use streaming mode for efficient chunk processing
+    video = cv2.VideoCapture(video_path)
+    if not video.isOpened():
+        logger.error(f"Cannot open video for chunk {chunk_id}")
+        return [], stats
+    
+    fps = video.get(cv2.CAP_PROP_FPS)
+    frame_skip = max(1, int(fps * sample_interval))
+    
+    # Seek to chunk start
+    start_frame = int(start_time * fps)
+    end_frame = int(end_time * fps)
+    video.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+    
+    frame_count = start_frame
+    processed = 0
+    
+    try:
+        while frame_count < end_frame:
+            ret, frame = video.read()
+            if not ret:
+                break
+            
+            if (frame_count - start_frame) % frame_skip == 0:
+                timestamp = frame_count / fps
+                processed += 1
+                
+                # Extract ROI
+                roi = reader.extract_score_roi(frame, None)
+                if roi is None:
+                    stats['fail'] += 1
+                    frame_count += 1
+                    continue
+                
+                # Check if frame changed (skip redundant OCR)
+                should_run_ocr = True
+                if change_detector and use_optimization:
+                    should_run_ocr = change_detector.has_changed(roi)
+                    if not should_run_ocr:
+                        stats['skipped'] += 1
+                
+                score, conf, text = None, 0.0, "<skipped>"
+                
+                if should_run_ocr:
+                    stats['ocr_calls'] += 1
+                    prev_wickets = detector.get_last_wickets()
+                    score, conf, text = reader.read_score(roi, min_confidence, prev_wickets)
+                
+                # Read overs (less frequently)
+                overs = None
+                if should_run_ocr and processed % 3 == 0:  # Every 3rd frame
+                    overs_roi = reader.extract_overs_roi(frame, None)
+                    if overs_roi is not None:
+                        overs = reader.read_overs(overs_roi)
+                
+                # Value persistence
+                if score:
+                    stats['success'] += 1
+                    last_valid_score = score
+                else:
+                    stats['fail'] += 1
+                    score = last_valid_score
+                
+                # 2-frame confirmation for events
+                if score:
+                    if candidate_score == score:
+                        candidate_count += 1
+                        if candidate_count >= 2:
+                            event = detector.detect(score, timestamp, overs)
+                            if event:
+                                events.append(event)
+                                candidate_count = 0
+                    else:
+                        candidate_score, candidate_count = score, 1
+            
+            frame_count += 1
+        
+    finally:
+        video.release()
+    
+    elapsed = time.time() - chunk_start_clock
+    
+    # Log chunk metrics
+    logger.info(f"Chunk {chunk_id} complete: {elapsed:.1f}s | "
+               f"{processed} frames | {stats['ocr_calls']} OCR | "
+               f"{stats['skipped']} skipped | {len(events)} events")
+    
+    stats['elapsed'] = elapsed
+    stats['processed_frames'] = processed
+    
+    return events, stats
+
+
+def process_video_parallel(video_path: str, config: ScoreboardConfig,
+                          sample_interval: float = 1.0,
+                          min_confidence: float = 0.4,
+                          num_workers: int = 4,
+                          chunk_duration: int = 600,
+                          preprocess: bool = True,
+                          use_optimization: bool = True) -> List[Dict]:
+    """
+    OPTIMIZED: Process video using parallel chunk processing with optimizations.
+    
+    This is the main entry point that replaces process_video() for large videos.
+    
+    Args:
+        video_path: Path to video file
+        config: Scoreboard configuration
+        sample_interval: Frame sampling interval (seconds)
+        min_confidence: OCR confidence threshold
+        num_workers: Number of parallel workers
+        chunk_duration: Chunk size in seconds (default: 600 = 10 minutes)
+        preprocess: Apply FFmpeg preprocessing (downscale, FPS reduction)
+        use_optimization: Enable frame change detection
+        
+    Returns:
+        List of detected events
+    """
+    perf_logger = PerformanceLogger()
+    perf_logger.start_pipeline()
+    
+    # Step 1: Optional preprocessing
+    processed_video = video_path
+    if preprocess:
+        logger.info("Step 1: Preprocessing video...")
+        temp_dir = Path(tempfile.gettempdir()) / "cricket_ocr"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        preprocessed_path = str(temp_dir / f"preprocessed_{Path(video_path).stem}.mp4")
+        processed_video = VideoPreprocessor.preprocess_video(
+            video_path, preprocessed_path,
+            target_height=720,
+            target_fps=15
+        )
+    
+    # Step 2: Create chunks
+    logger.info(f"Step 2: Creating chunks ({chunk_duration}s each)...")
+    chunker = VideoChunker(chunk_duration_sec=chunk_duration)
+    chunks = chunker.create_chunks(processed_video, start_time=float(config.start_time or 0.0))
+    
+    # Step 3: Process chunks in parallel
+    logger.info(f"⚡ Step 3: Processing {len(chunks)} chunks with {num_workers} workers...")
+    
+    all_events = []
+    all_stats = []
+    
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # Submit all chunks
+        futures = {
+            executor.submit(
+                process_chunk_worker, chunk, config, 
+                sample_interval, min_confidence, use_optimization
+            ): chunk['chunk_id'] 
+            for chunk in chunks
+        }
+        
+        # Collect results as they complete
+        for future in as_completed(futures):
+            chunk_id = futures[future]
+            try:
+                events, stats = future.result()
+                all_events.extend(events)
+                all_stats.append(stats)
+                
+                # Log progress
+                perf_logger.log_chunk_complete(
+                    chunk_id, stats['elapsed'],
+                    stats['processed_frames'],
+                    stats['ocr_calls'],
+                    len(events)
+                )
+                
+            except Exception as exc:
+                logger.error(f"Chunk {chunk_id} failed: {exc}")
+    
+    # Step 4: Sort events by timestamp (chunks may complete out of order)
+    all_events.sort(key=lambda e: e['timestamp'])
+    
+    # Remove duplicate events at chunk boundaries (30s overlap)
+    all_events = remove_duplicate_events(all_events, time_window=25.0)
+    
+    # Calculate aggregate stats
+    total_frames = sum(s['processed_frames'] for s in all_stats)
+    total_ocr = sum(s['ocr_calls'] for s in all_stats)
+    total_skipped = sum(s['skipped'] for s in all_stats)
+    
+    perf_logger.total_frames = total_frames
+    perf_logger.ocr_calls = total_ocr
+    perf_logger.skipped_frames = total_skipped
+    
+    perf_logger.log_pipeline_complete(len(all_events))
+    
+    # Cleanup preprocessed file if created
+    if preprocess and processed_video != video_path:
+        try:
+            Path(processed_video).unlink()
+        except:
+            pass
+    
+    return all_events
+
+
+def remove_duplicate_events(events: List[Dict], time_window: float = 25.0) -> List[Dict]:
+    """
+    Remove duplicate events that occur within time_window (chunk overlap handling).
+    
+    Args:
+        events: List of events sorted by timestamp
+        time_window: Time window for considering events as duplicates
+        
+    Returns:
+        Deduplicated event list
+    """
+    if not events:
+        return []
+    
+    unique_events = [events[0]]
+    
+    for event in events[1:]:
+        is_duplicate = False
+        
+        for prev_event in unique_events[-3:]:  # Check last 3 events only
+            time_diff = abs(event['timestamp'] - prev_event['timestamp'])
+            
+            if (time_diff < time_window and 
+                event['type'] == prev_event['type']):
+                is_duplicate = True
+                break
+        
+        if not is_duplicate:
+            unique_events.append(event)
+    
+    duplicates_removed = len(events) - len(unique_events)
+    if duplicates_removed > 0:
+        logger.info(f"Removed {duplicates_removed} duplicate events at chunk boundaries")
+    
+    return unique_events
+
+
+# ORIGINAL PROCESSING FUNCTIONS 
 def process_video(video_path: str, config: ScoreboardConfig, sample_interval: float = 1.0, max_frames: Optional[int] = None, debug_mode: bool = False, min_confidence: float = 0.4) -> List[Dict]:
     """Process video to detect cricket events."""
     logger.info("=" * 60)
-    logger.info("🏏 CRICKET HIGHLIGHT DETECTION")
+    logger.info("CRICKET HIGHLIGHT DETECTION")
     logger.info("=" * 60)
 
     reader = OCRScoreReader(config, use_gpu=config.use_gpu)
@@ -1434,9 +2084,9 @@ def process_video(video_path: str, config: ScoreboardConfig, sample_interval: fl
                                     current_batsmen = parse_batsmen_details(raw_text)
                                     
                                     if current_batsmen[0]:
-                                        logger.debug(f"   📊 Batsmen: {current_batsmen[0]} | {current_batsmen[1]}")
+                                        logger.debug(f"   Batsmen: {current_batsmen[0]} | {current_batsmen[1]}")
                             except Exception as e:
-                                logger.debug(f"   ⚠️  Error reading batsmen details: {e}")
+                                logger.debug(f"   Error reading batsmen details: {e}")
                 else:
                     stats['fail'] += 1
                     score = last_valid_score
@@ -1471,24 +2121,24 @@ def process_video(video_path: str, config: ScoreboardConfig, sample_interval: fl
                                     # Allow small OCR tolerance (±1)
                                     if diff1 >= runs_scored - 1 and diff1 > 0:
                                         detected_player = b1_new.name
-                                        logger.info(f"   🕵️  Delta Logic: {b1_new.name} scored +{diff1} runs ({b1_old.runs} → {b1_new.runs})")
+                                        logger.info(f"   Delta Logic: {b1_new.name} scored +{diff1} runs ({b1_old.runs} → {b1_new.runs})")
                                     elif diff2 >= runs_scored - 1 and diff2 > 0:
                                         detected_player = b2_new.name
-                                        logger.info(f"   🕵️  Delta Logic: {b2_new.name} scored +{diff2} runs ({b2_old.runs} → {b2_new.runs})")
+                                        logger.info(f"   Delta Logic: {b2_new.name} scored +{diff2} runs ({b2_old.runs} → {b2_new.runs})")
                                     else:
-                                        logger.warning(f"   ⚠️  No clear scorer: {b1_old.name} +{diff1}, {b2_old.name} +{diff2}")
+                                        logger.warning(f"   No clear scorer: {b1_old.name} +{diff1}, {b2_old.name} +{diff2}")
                                 
                                 # Fallback: if delta logic failed, try current batsman name
                                 if detected_player == 'Unknown' and current_batsmen[0]:
                                     # Use first batsman as fallback (usually the striker)
                                     detected_player = current_batsmen[0].name
-                                    logger.info(f"   ℹ️  Fallback: Using {detected_player} (striker position)")
+                                    logger.info(f"   Fallback: Using {detected_player} (striker position)")
                                 
                                 event['batsman'] = detected_player
                                 if detected_player != 'Unknown':
                                     logger.info(f"   🏏 {event['type']} by {detected_player}")
                                 else:
-                                    logger.warning(f"   ⚠️  Could not identify batsman for {event['type']}")
+                                    logger.warning(f"   Could not identify batsman for {event['type']}")
                                 
                                 events.append(event)
                     else:
@@ -1512,14 +2162,14 @@ def process_video(video_path: str, config: ScoreboardConfig, sample_interval: fl
     # Summary
     total = max(processed, 1)
     logger.info("-" * 60)
-    logger.info(f"✅ Analysis complete: {processed} frames")
+    logger.info(f"Analysis complete: {processed} frames")
     logger.info(f"   OCR Success: {stats['success']} ({stats['success']/total*100:.1f}%)")
     logger.info(f"   OCR Failures: {stats['fail']} ({stats['fail']/total*100:.1f}%)")
     logger.info(f"   Low Confidence: {stats['low_conf']} ({stats['low_conf']/total*100:.1f}%)")
     logger.info(f"   Events detected: {len(events)}")
 
     if stats['fail'] > processed * 0.5:
-        logger.warning("⚠️ High OCR failure rate. Run with --visualize to check ROI.")
+        logger.warning("High OCR failure rate. Run with --visualize to check ROI.")
 
     return events
 
@@ -1691,7 +2341,7 @@ def process_video_streaming(
 
     total = max(processed, 1)
     logger.info("-" * 60)
-    logger.info("✅ Streaming analysis complete: %s frames", processed)
+    logger.info("Streaming analysis complete: %s frames", processed)
     logger.info("   OCR Success: %s (%.1f%%)", stats["success"], stats["success"] / total * 100)
     logger.info("   OCR Failures: %s (%.1f%%)", stats["fail"], stats["fail"] / total * 100)
     logger.info("   Low Confidence: %s (%.1f%%)", stats["low_conf"], stats["low_conf"] / total * 100)
@@ -1782,7 +2432,7 @@ def calculate_clip_ranges(
             # Gap too large - start a new clip
             merged.append(current)
     
-    logger.info(f"📊 Clip coalescing: {len(events)} events → {len(merged)} clips")
+    logger.info(f"Clip coalescing: {len(events)} events → {len(merged)} clips")
     for i, clip in enumerate(merged, 1):
         duration = clip['end'] - clip['start']
         event_types = [e['type'] for e in clip['events']]
@@ -1790,6 +2440,112 @@ def calculate_clip_ranges(
                    f"({duration:.1f}s, events: {event_types})")
     
     return merged
+
+
+def extract_single_clip_worker(args: Tuple) -> Optional[str]:
+    """
+    Worker function to extract a single clip in parallel.
+    
+    Args:
+        args: Tuple of (video_path, start, duration, output_path)
+        
+    Returns:
+        Path to extracted clip or None if failed
+    """
+    video_path, start, duration, output_path, clip_name = args
+    
+    cmd = [
+        'ffmpeg', '-hide_banner', '-loglevel', 'error',
+        '-ss', str(start),
+        '-i', video_path,
+        '-t', str(duration),
+        '-c', 'copy',
+        '-avoid_negative_ts', '1',
+        '-y', str(output_path)
+    ]
+    
+    result = subprocess.run(cmd, capture_output=True)
+    
+    if result.returncode == 0:
+        size = Path(output_path).stat().st_size / (1024 * 1024)
+        logger.debug(f"{clip_name} ({duration:.1f}s, {size:.1f} MB)")
+        return str(output_path)
+    else:
+        logger.error(f"{clip_name} failed: {result.stderr.decode()[:100]}")
+        return None
+
+
+def extract_clips_parallel(
+    video_path: str,
+    events: List[Dict],
+    output_dir: str,
+    before: float = PADDING_BEFORE,
+    after: float = PADDING_AFTER,
+    merge_gap: float = MERGE_GAP_THRESHOLD,
+    max_workers: int = 4
+) -> List[str]:
+    """
+    OPTIMIZED: Extract clips in parallel using ProcessPoolExecutor.
+    
+    Args:
+        video_path: Path to source video
+        events: List of detected events
+        output_dir: Directory for output clips
+        before: Seconds before event
+        after: Seconds after event
+        merge_gap: Merge threshold
+        max_workers: Number of parallel workers
+        
+    Returns:
+        List of paths to extracted clips
+    """
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    if not events:
+        logger.warning("No events to extract clips from")
+        return []
+    
+    logger.info(f"PARALLEL Clip Extraction ({max_workers} workers)")
+    start_time = time.time()
+    
+    # Get video duration and calculate clip ranges
+    video_duration = get_video_duration(video_path)
+    clip_ranges = calculate_clip_ranges(events, video_duration, before, after, merge_gap)
+    
+    logger.info(f"Extracting {len(clip_ranges)} clips (padding: {before}s before, {after}s after)")
+    
+    # Prepare tasks for parallel execution
+    tasks = []
+    for i, clip_range in enumerate(clip_ranges):
+        start = clip_range['start']
+        duration = clip_range['end'] - start
+        
+        # Generate filename
+        event_types = '_'.join(sorted(set(e['type'] for e in clip_range['events'])))
+        player_names = [e.get('batsman', 'Unknown') for e in clip_range['events']]
+        known_names = [n for n in player_names if n != 'Unknown']
+        primary_player = known_names[0] if known_names else 'Unknown'
+        safe_player = re.sub(r'[^A-Za-z0-9]', '', primary_player)
+        
+        clip_name = f"{safe_player}_{event_types}_{int(start)}s.mp4"
+        clip_path = Path(output_dir) / clip_name
+        
+        tasks.append((video_path, start, duration, str(clip_path), clip_name))
+    
+    # Execute in parallel
+    clips = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(extract_single_clip_worker, task) for task in tasks]
+        
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                clips.append(result)
+    
+    elapsed = time.time() - start_time
+    logger.info(f"Extracted {len(clips)} clips in {elapsed:.1f}s ({len(clips)/elapsed:.1f} clips/s)")
+    
+    return clips
 
 
 def extract_clips(
@@ -1835,7 +2591,7 @@ def extract_clips(
         events, video_duration, before, after, merge_gap
     )
     
-    logger.info(f"\n✂️ Extracting {len(clip_ranges)} clips "
+    logger.info(f"\nExtracting {len(clip_ranges)} clips "
                f"(padding: {before}s before, {after}s after, merge gap: {merge_gap}s)")
     
     for i, clip_range in enumerate(clip_ranges, 1):
@@ -2010,10 +2766,10 @@ def extract_player_innings_highlights(
         if result.returncode == 0:
             size = Path(reel_path).stat().st_size / (1024 * 1024)
             duration = sum(r['end'] - r['start'] for r in clip_ranges)
-            logger.info(f"   ✅ {safe_name}_Innings.mp4 ({duration:.1f}s, {size:.1f} MB)")
+            logger.info(f"   {safe_name}_Innings.mp4 ({duration:.1f}s, {size:.1f} MB)")
             player_reels[player] = reel_path
         else:
-            logger.error(f"   ❌ Failed to create {player} innings highlight")
+            logger.error(f"   Failed to create {player} innings highlight")
     
     return player_reels
 
@@ -2207,7 +2963,7 @@ def main():
     for e in events:
         counts[e['type']] = counts.get(e['type'], 0) + 1
 
-    logger.info("\n📊 EVENT SUMMARY")
+    logger.info("\nEVENT SUMMARY")
     for t, c in sorted(counts.items()):
         logger.info(f"   {t}: {c}")
 
@@ -2243,7 +2999,7 @@ def main():
             for player, path in player_reels.items():
                 logger.info(f"   {player}: {path}")
 
-    logger.info("\n✅ COMPLETE")
+    logger.info("\nCOMPLETE")
 
 
 if __name__ == '__main__':

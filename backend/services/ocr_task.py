@@ -195,7 +195,9 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
             ScoreboardConfig,
             process_video,
             process_video_streaming,
+            process_video_optimized,
             extract_clips,
+            extract_clips_parallel,
             create_supercut,
         )
         
@@ -217,16 +219,34 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
             if 'start_time' in config:
                 ocr_config.start_time = config['start_time']
         
-        # Run OCR detection in streaming mode for remote/GCS sources.
+        # Run OCR detection - choose best mode based on source type
         video_source, use_streaming = _resolve_video_source(video.file_path)
+        
+        # Check if parallel optimization is enabled (default: True for large videos)
+        use_parallel = config.get('use_parallel', True) if config else True
+        
         if use_streaming:
+            # Streaming mode for remote sources (GCS signed URLs)
+            logger.info("Using STREAMING mode (remote source)")
             events = process_video_streaming(
                 video_source=video_source,
                 config=ocr_config,
                 sample_interval=1.0,
                 min_confidence=0.4,
             )
+        elif use_parallel:
+            # Optimized parallel mode for local files (auto-detects video size)
+            logger.info("Using OPTIMIZED mode (auto-selects parallel/sequential)")
+            events = process_video_optimized(
+                video_path=video_source,
+                config=ocr_config,
+                sample_interval=1.0,
+                min_confidence=0.4,
+                auto_parallel=True
+            )
         else:
+            # Legacy sequential mode (backward compatibility)
+            logger.info("Using SEQUENTIAL mode (legacy)")
             events = process_video(
                 video_path=video_source,
                 config=ocr_config,
@@ -266,13 +286,28 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
             clips_dir.mkdir(parents=True, exist_ok=True)
 
             if events:
-                clips = extract_clips(
-                    video_path=video_source,
-                    events=events,
-                    output_dir=str(clips_dir),
-                    before=clip_before,
-                    after=clip_after,
-                )
+                # Use parallel clip extraction for better performance
+                use_parallel_clips = config.get('parallel_clips', True) if config else True
+                
+                if use_parallel_clips and len(events) > 5:
+                    logger.info("Using PARALLEL clip extraction")
+                    clips = extract_clips_parallel(
+                        video_path=video_source,
+                        events=events,
+                        output_dir=str(clips_dir),
+                        before=clip_before,
+                        after=clip_after,
+                        max_workers=4
+                    )
+                else:
+                    logger.info("Using SEQUENTIAL clip extraction")
+                    clips = extract_clips(
+                        video_path=video_source,
+                        events=events,
+                        output_dir=str(clips_dir),
+                        before=clip_before,
+                        after=clip_after,
+                    )
 
             # Create final supercut in the temp workspace and persist only the final artifact.
             if clips:
@@ -369,11 +404,11 @@ def run_ocr_processing(video_id: str, config: Optional[Dict] = None) -> None:
         
         db.commit()
         
-        logger.info(f"✅ Completed OCR processing for video {video_id}: "
+        logger.info(f"Completed OCR processing for video {video_id}: "
                     f"{fours} fours, {sixes} sixes, {wickets} wickets")
         
     except Exception as e:
-        logger.error(f"❌ OCR processing failed for video {video_id}: {str(e)}")
+        logger.error(f"OCR processing failed for video {video_id}: {str(e)}")
         logger.error(traceback.format_exc())
         
         # Rollback any pending transaction

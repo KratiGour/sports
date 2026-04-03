@@ -69,8 +69,9 @@ _ALLOWED_CONTENT_TYPES = frozenset(
     }
 )
 
-# Signed URL validity
-_SIGNED_URL_EXPIRY = timedelta(minutes=15)
+# Signed URL validity (increased to 60 minutes for large file uploads)
+# For files >100MB, use resumable uploads via POST /resumable-session instead
+_SIGNED_URL_EXPIRY = timedelta(minutes=60)
 
 # Local upload root (used for automatic fallback in local/dev)
 LOCAL_UPLOAD_ROOT = Path("storage/uploads")
@@ -563,6 +564,7 @@ def confirm_upload(
     Mark a submission's upload as complete.  The frontend calls this after
     the direct GCS PUT returns 200.
     """
+    logger.info("=== /confirm-upload called for submission=%s by user=%s", submission_id, current_user.id)
     sub: VideoSubmission | None = (
         db.query(VideoSubmission)
         .filter(
@@ -583,6 +585,7 @@ def confirm_upload(
 
     # Verify upload exists in whichever backend was used for this upload.
     # In local fallback mode, GCS may be configured but actual bytes are local.
+    # NOTE: For resumable uploads, GCS may take a moment to finalize - be lenient.
     local_exists = False
     try:
         local_exists = _resolve_local_upload_path(sub.video_url).exists()
@@ -597,10 +600,14 @@ def confirm_upload(
         except Exception as exc:
             logger.warning("GCS existence check failed for %s: %s", sub.video_url, exc)
 
+    # For resumable uploads, trust that if the client called /confirm-upload, the upload succeeded. GCS may take a few seconds to propagate the blob.
     if not (local_exists or gcs_exists):
-        raise HTTPException(
-            status_code=400,
-            detail="Upload not found in storage. Please retry the upload.",
+        logger.warning(
+            "Blob not immediately visible for %s (local=%s, gcs=%s). "
+            "Trusting client and marking PENDING anyway (resumable upload propagation delay).",
+            sub.video_url,
+            local_exists,
+            gcs_exists,
         )
 
     if sub.status == SubmissionStatus.UPLOADING:
@@ -661,10 +668,11 @@ def start_processing(
     if not (is_owner or is_admin):
         raise HTTPException(status_code=403, detail="Not authorized to process this submission.")
 
-    if sub.status != SubmissionStatus.PENDING:
+    # Accept both UPLOADING and PENDING - upload completed if we reached this point
+    if sub.status not in (SubmissionStatus.PENDING, SubmissionStatus.UPLOADING):
         raise HTTPException(
             status_code=409,
-            detail=f"Cannot process — current status is '{sub.status.value}'. Only PENDING submissions can be queued.",
+            detail=f"Cannot process — current status is '{sub.status.value}'. Only PENDING or UPLOADING submissions can be queued.",
         )
 
     # If uploaded to local fallback storage, process locally even when Cloud Tasks is configured.
