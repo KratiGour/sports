@@ -61,11 +61,10 @@ interface ErrorLike {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-// UpChunk expects chunk size in KiB (not bytes).
-// Valid range: 256..512000 KiB, multiple of 256.
-const DEFAULT_CHUNK_SIZE_KIB = 64 * 1024; // 64 MiB (fewer requests for multi-GB uploads)
-const MIN_CHUNK_SIZE_KIB = 8 * 1024;
-const MAX_CHUNK_SIZE_KIB = 128 * 1024;
+// UpChunk expects chunk size in BYTES. Valid range: 256..512000 bytes (256 bytes to 500 KB), multiple of 256.
+const DEFAULT_CHUNK_SIZE_KIB = 256 * 1024; // 256 KB (safe within 512000 limit)
+const MIN_CHUNK_SIZE_KIB = 256; // 256 bytes minimum
+const MAX_CHUNK_SIZE_KIB = 512000; // 512000 bytes (500 KB) maximum
 const UPLOAD_RETRY_ATTEMPTS = 12;
 const UPLOAD_RETRY_DELAY_SECONDS = 2;
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024 * 1024;
@@ -256,17 +255,21 @@ export default function HeavyVideoUploader({
         throw new Error("Missing submission_id from resumable-session response.");
       }
 
+      console.log("[HeavyVideoUploader] Calling /confirm-upload for:", submissionId);
       await axios.post(`${API_BASE_URL}/api/v1/storage/confirm-upload`, null, {
         params: { submission_id: submissionId },
         headers: buildHeaders(),
         timeout: 60000,
       });
+      console.log("[HeavyVideoUploader] /confirm-upload succeeded");
 
+      console.log("[HeavyVideoUploader] Calling /start-processing for:", submissionId);
       await axios.post(`${API_BASE_URL}${startProcessingPath}`, null, {
         params: { submission_id: submissionId },
         headers: buildHeaders(),
         timeout: 60000,
       });
+      console.log("[HeavyVideoUploader] /start-processing succeeded");
     },
     [buildHeaders, startProcessingPath],
   );
@@ -414,7 +417,7 @@ export default function HeavyVideoUploader({
         },
         attempts: UPLOAD_RETRY_ATTEMPTS,
         delayBeforeAttempt: UPLOAD_RETRY_DELAY_SECONDS,
-        dynamicChunkSize: true,
+        dynamicChunkSize: false, // Disable dynamic sizing to avoid exceeding 512KB limit
         minChunkSize: MIN_CHUNK_SIZE_KIB,
         maxChunkSize: MAX_CHUNK_SIZE_KIB,
         retryCodes: [408, 409, 429, 500, 502, 503, 504],
