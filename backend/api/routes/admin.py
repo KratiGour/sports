@@ -276,29 +276,3 @@ def verify_coach(
     logger.info(f"Coach {coach.email} {action} by admin {current_user.email}")
     
     return coach
-def verify_coach(
-    coach_id: str,
-    action: str = Query(..., regex="^(verified|rejected)$"),
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
-):
-    """Approve or reject coach verification"""
-    
-    coach = db.query(User).filter(
-        User.id == coach_id,
-        User.role == 'COACH'
-    ).first()
-    
-    if not coach:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Coach not found"
-        )
-    
-    coach.coach_status = action
-    db.commit()
-    db.refresh(coach)
-    
-    logger.info(f"Coach {coach.email} {action} by admin {current_user.email}")
-    
-    return coach
