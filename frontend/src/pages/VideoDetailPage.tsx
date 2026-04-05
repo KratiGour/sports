@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Play, Download, Clock, Filter, MapPin, Calendar, TrendingUp } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Play, Download, Clock, MapPin, Calendar, TrendingUp } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { resolveMediaUrl, videosApi } from '../lib/api';
 
 interface VideoDetail {
