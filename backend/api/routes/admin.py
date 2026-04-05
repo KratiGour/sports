@@ -94,16 +94,32 @@ def get_user_details(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Get detailed information about a specific user"""
-    
+    """Get detailed profile of a specific user"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    return user
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    return {
+        "id": str(user.id),
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+        "phone": user.phone,
+        "team": user.team,
+        "profile_bio": user.profile_bio,
+        "gender": user.gender,
+        "jersey_number": user.jersey_number,
+        "subscription_plan": user.subscription_plan,
+        "coach_status": user.coach_status,
+        "coach_category": user.coach_category,
+        "specialization": user.specialization,
+        "certifications": user.certifications,
+        "intro_video_url": user.intro_video_url,
+        "profile_image_url": user.profile_image_url,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "last_login": user.last_login.isoformat() if user.last_login else None,
+    }
 
 
 @router.patch("/users/{user_id}")
