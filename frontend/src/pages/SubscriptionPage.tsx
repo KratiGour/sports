@@ -11,10 +11,6 @@ interface Plan {
   features: string;
 }
 
-const PLAN_STYLES: Record<string, { gradient: string; icon: string; badge: string }> = {
-  default: { gradient: 'from-blue-500 to-purple-600', icon: 'fa-star', badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-};
-
 function getPlanStyle(index: number) {
   const styles = [
     { gradient: 'from-blue-500 to-cyan-500', icon: 'fa-bolt', badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
