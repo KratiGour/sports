@@ -127,6 +127,18 @@ export const authApi = {
     specialization: string[];
     coach_category: string;
   }>) => api.put('/auth/me', data),
+
+  uploadIntroVideo: (file: File, onProgress?: (p: number) => void) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post<{ intro_video_url: string }>('/auth/coach-intro-video', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+      onUploadProgress: (e) => {
+        if (e.total && onProgress) onProgress(Math.round((e.loaded * 100) / e.total));
+      },
+    });
+  },
 };
 
 // Video endpoints

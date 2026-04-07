@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { authService } from '../utils/auth';
-import { authApi, api } from '../lib/api';
+import { useAuthStore } from '../store/authStore';
+import { authApi } from '../lib/api';
 
 const SPECIALIZATIONS = ['Batting', 'Bowling', 'Fielding', 'Fitness', 'Mental', 'Wicketkeeping'];
 
@@ -12,7 +12,7 @@ interface Certification {
 }
 
 export default function ProfilePage() {
-  const userProfile = authService.getUserProfile();
+  const { user: userProfile, updateUser, fetchProfile } = useAuthStore();
   const isCoach = userProfile?.role === 'COACH';
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -88,15 +88,10 @@ export default function ProfilePage() {
     if (!file) return;
     setVideoUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await api.post('/auth/coach-intro-video', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await authApi.uploadIntroVideo(file);
       const url = res.data.intro_video_url;
       setIntroVideoUrl(url);
-      const updatedProfile = { ...userProfile, intro_video_url: url };
-      localStorage.setItem('user_profile', JSON.stringify(updatedProfile));
+      updateUser({ intro_video_url: url });
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Video upload failed');
     } finally {
@@ -123,11 +118,8 @@ export default function ProfilePage() {
       }
 
       await authApi.updateProfile(updateData);
-      
-      // Update local storage
-      const updatedProfile = { ...userProfile, ...updateData };
-      localStorage.setItem('user_profile', JSON.stringify(updatedProfile));
-      
+      // Sync store with latest server state — no manual localStorage writes
+      await fetchProfile();
       setIsEditing(false);
     } catch (error) {
       console.error('Failed to update profile:', error);
