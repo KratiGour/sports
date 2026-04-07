@@ -1,23 +1,60 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import Optional
+from datetime import datetime, timedelta
+from pydantic import BaseModel, ConfigDict
+
 from database.config import get_db
 from database.models.subscription import Subscription
 from database.models.plan import Plan
 from database.models.user import User
 from utils.auth import get_current_user
-from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/subscriptions")
 
 
-@router.post("/subscribe")
+# ── Pydantic Schemas ──────────────────────────────────────────────────────────
+
+class SubscriptionResponse(BaseModel):
+    id: int
+    user_id: str
+    plan_id: int
+    plan_name: str
+    plan_features: str
+    monthly_price: int
+    yearly_price: int
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _build_response(sub: Subscription, plan: Plan) -> SubscriptionResponse:
+    return SubscriptionResponse(
+        id=sub.id,
+        user_id=sub.user_id,
+        plan_id=sub.plan_id,
+        plan_name=plan.name,
+        plan_features=plan.features,
+        monthly_price=plan.monthly_price,
+        yearly_price=plan.yearly_price,
+        start_date=sub.start_date,
+        end_date=sub.end_date,
+    )
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.post("/subscribe", response_model=SubscriptionResponse)
 def subscribe(
     user_id: str,
     plan_id: int,
+    billing_cycle: str = "monthly",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Users can only subscribe themselves (admins can subscribe anyone)
     if current_user.role != "ADMIN" and current_user.id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot subscribe on behalf of another user")
 
@@ -26,9 +63,8 @@ def subscribe(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
 
     start = datetime.utcnow()
-    end = start + timedelta(days=30)
+    end = start + (timedelta(days=365) if billing_cycle == "yearly" else timedelta(days=30))
 
-    # Upsert — update existing subscription if one exists
     existing = db.query(Subscription).filter(Subscription.user_id == user_id).first()
     if existing:
         existing.plan_id = plan_id
@@ -36,18 +72,16 @@ def subscribe(
         existing.end_date = end
         db.commit()
         db.refresh(existing)
-        return {"id": existing.id, "user_id": existing.user_id, "plan_id": existing.plan_id,
-                "start_date": existing.start_date, "end_date": existing.end_date}
+        return _build_response(existing, plan)
 
     sub = Subscription(user_id=user_id, plan_id=plan_id, start_date=start, end_date=end)
     db.add(sub)
     db.commit()
     db.refresh(sub)
-    return {"id": sub.id, "user_id": sub.user_id, "plan_id": sub.plan_id,
-            "start_date": sub.start_date, "end_date": sub.end_date}
+    return _build_response(sub, plan)
 
 
-@router.get("/user/{user_id}")
+@router.get("/user/{user_id}", response_model=Optional[SubscriptionResponse])
 def get_user_subscription(
     user_id: str,
     db: Session = Depends(get_db),
@@ -59,5 +93,9 @@ def get_user_subscription(
     sub = db.query(Subscription).filter(Subscription.user_id == user_id).first()
     if not sub:
         return None
-    return {"id": sub.id, "user_id": sub.user_id, "plan_id": sub.plan_id,
-            "start_date": sub.start_date, "end_date": sub.end_date}
+
+    plan = db.query(Plan).filter(Plan.id == sub.plan_id).first()
+    if not plan:
+        return None
+
+    return _build_response(sub, plan)
