@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useThemeStore } from '../store/themeStore';
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { api } from '../lib/api';
 
 interface User {
   id: string;
@@ -35,10 +33,10 @@ function ProfileModal({ userId, onClose, theme }: { userId: string; onClose: () 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    axios.get(`${API_URL}/api/v1/admin/users/${userId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    }).then(r => setProfile(r.data)).catch(console.error).finally(() => setLoading(false));
+    api.get(`/admin/users/${userId}`)
+      .then(r => setProfile(r.data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [userId]);
 
   const field = (label: string, value: any) =>
@@ -189,20 +187,15 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('access_token');
-      const params = new URLSearchParams({
+      const params: Record<string, string> = {
         page: page.toString(),
         per_page: '20',
-      });
-      
-      if (search) params.append('search', search);
-      if (roleFilter) params.append('role', roleFilter);
-      if (statusFilter) params.append('is_active', statusFilter);
+      };
+      if (search) params.search = search;
+      if (roleFilter) params.role = roleFilter;
+      if (statusFilter) params.is_active = statusFilter;
 
-      const response = await axios.get(`${API_URL}/api/v1/admin/users?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
+      const response = await api.get('/admin/users', { params });
       setUsers(response.data.users);
       setTotal(response.data.total);
       setTotalPages(response.data.total_pages);
@@ -215,12 +208,7 @@ export default function AdminUsersPage() {
 
   const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
     try {
-      const token = localStorage.getItem('access_token');
-      await axios.patch(
-        `${API_URL}/api/v1/admin/users/${userId}`,
-        { is_active: !currentStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.patch(`/admin/users/${userId}`, { is_active: !currentStatus });
       fetchUsers();
     } catch (error) {
       console.error('Failed to update user:', error);
