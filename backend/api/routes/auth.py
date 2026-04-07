@@ -14,7 +14,7 @@ from pathlib import Path
 from database.config import get_db
 from database.models.user import User
 from database.models.session import UserSession
-from schemas.auth import UserCreate, UserLogin, Token, UserResponse, TokenResponse, ProfileUpdateRequest
+from schemas.auth import UserCreate, UserLogin, Token, UserResponse, TokenResponse, ProfileUpdateRequest, IntroVideoResponse
 from utils.auth import (
     create_refresh_token,
     get_password_hash,
@@ -240,39 +240,77 @@ def update_current_user(
     return current_user
 
 
-@router.post("/coach-intro-video")
+@router.post("/coach-intro-video", response_model=IntroVideoResponse)
 async def upload_intro_video(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Upload or replace coach intro video."""
+    """Upload or replace coach intro video — streams directly to GCS, falls back to local disk in dev."""
     if current_user.role != 'COACH':
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only coaches can upload intro videos")
 
     ALLOWED_VIDEO = {'.mp4', '.mov', '.avi', '.webm', '.mkv'}
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_VIDEO:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid video format. Allowed: mp4, mov, avi, webm, mkv")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid video format. Allowed: mp4, mov, avi, webm, mkv"
+        )
 
-    MAX_SIZE = 100 * 1024 * 1024  # 100MB
+    unique_filename = f"{secrets.token_urlsafe(16)}{ext}"
+
     try:
-        content = await file.read()
-        if len(content) > MAX_SIZE:
-            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large. Max 100MB.")
+        gcs_bucket = os.getenv("GCS_BUCKET_NAME", "")
 
-        storage_dir = Path("storage/coach_intro_videos")
-        storage_dir.mkdir(parents=True, exist_ok=True)
-        unique_filename = f"{secrets.token_urlsafe(16)}{ext}"
-        file_path = storage_dir / unique_filename
-        with open(file_path, "wb") as buf:
-            buf.write(content)
+        if gcs_bucket:
+            # Stream directly to GCS — never loads full file into RAM
+            import google.cloud.storage as gcs_lib
+            gcs_client = gcs_lib.Client()
+            bucket = gcs_client.bucket(gcs_bucket)
+            blob = bucket.blob(f"coach_intro_videos/{unique_filename}")
 
-        current_user.intro_video_url = f"/static/coach_intro_videos/{unique_filename}"
+            CHUNK = 256 * 1024  # 256 KB chunks
+            with blob.open("wb", content_type=file.content_type or "video/mp4") as gcs_stream:
+                while True:
+                    chunk = await file.read(CHUNK)
+                    if not chunk:
+                        break
+                    gcs_stream.write(chunk)
+
+            intro_video_url = f"https://storage.googleapis.com/{gcs_bucket}/coach_intro_videos/{unique_filename}"
+        else:
+            # Local dev fallback — stream to disk in chunks (no full RAM load)
+            storage_dir = Path("storage/coach_intro_videos")
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            file_path = storage_dir / unique_filename
+
+            CHUNK = 256 * 1024  # 256 KB chunks
+            MAX_SIZE = 100 * 1024 * 1024  # 100 MB
+            written = 0
+            with open(file_path, "wb") as buf:
+                while True:
+                    chunk = await file.read(CHUNK)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > MAX_SIZE:
+                        buf.close()
+                        file_path.unlink(missing_ok=True)
+                        raise HTTPException(
+                            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            detail="File too large. Max 100MB."
+                        )
+                    buf.write(chunk)
+
+            intro_video_url = f"/static/coach_intro_videos/{unique_filename}"
+
+        current_user.intro_video_url = intro_video_url
         db.commit()
         db.refresh(current_user)
-        logger.info(f"Intro video uploaded for coach: {current_user.email}")
-        return {"intro_video_url": current_user.intro_video_url}
+        logger.info(f"Intro video uploaded for coach: {current_user.email} -> {intro_video_url}")
+        return IntroVideoResponse(intro_video_url=intro_video_url)
+
     except HTTPException:
         raise
     except Exception as e:

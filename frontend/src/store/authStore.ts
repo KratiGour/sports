@@ -55,6 +55,7 @@ interface AuthState {
   }) => Promise<boolean>;
   logout: () => Promise<void>;
   fetchProfile: () => Promise<void>;
+  updateUser: (partial: Partial<User>) => void;
   clearError: () => void;
   
   // Helpers
@@ -179,6 +180,14 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       
+      // Update user fields in store (used by ProfilePage to avoid direct localStorage writes)
+      updateUser: (partial: Partial<User>) => {
+        const current = get().user;
+        if (!current) return;
+        const updated = { ...current, ...partial };
+        set({ user: updated });
+      },
+
       // Clear error
       clearError: () => set({ error: null }),
       
