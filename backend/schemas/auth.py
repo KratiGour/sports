@@ -171,6 +171,13 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
+# Intro video upload response schema
+class IntroVideoResponse(BaseModel):
+    intro_video_url: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # Set aliases for backward compatibility
 UserCreate = UserRegisterRequest
 UserLogin = UserLoginRequest

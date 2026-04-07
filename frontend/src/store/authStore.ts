@@ -32,7 +32,6 @@ export interface User {
   intro_video_url?: string;
   profile_image_url?: string;
   coach_category?: string;
-  coach_status?: 'incomplete' | 'pending' | 'verified' | 'rejected';
 }
 
 interface AuthState {
@@ -55,7 +54,8 @@ interface AuthState {
     team?: string;
   }) => Promise<boolean>;
   logout: () => Promise<void>;
-  fetchProfile: () => Promise<User | null>;
+  fetchProfile: () => Promise<void>;
+  updateUser: (partial: Partial<User>) => void;
   clearError: () => void;
   
   // Helpers
@@ -96,7 +96,6 @@ export const useAuthStore = create<AuthState>()(
             role: user.role,
             is_verified: true,
             created_at: new Date().toISOString(),
-            coach_status: user.coach_status,
           } : null;
           
           // Store user profile in localStorage
@@ -169,16 +168,26 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authApi.getProfile();
           const user = response.data as User;
+          
+          // Also store in localStorage for backward compatibility
           localStorage.setItem('user_profile', JSON.stringify(user));
+          
           set({ user, isAuthenticated: true });
-          return user;
         } catch (error) {
           console.error('Failed to fetch profile:', error);
+          // If profile fetch fails, clear auth
           get().logout();
-          return null;
         }
       },
       
+      // Update user fields in store (used by ProfilePage to avoid direct localStorage writes)
+      updateUser: (partial: Partial<User>) => {
+        const current = get().user;
+        if (!current) return;
+        const updated = { ...current, ...partial };
+        set({ user: updated });
+      },
+
       // Clear error
       clearError: () => set({ error: null }),
       
