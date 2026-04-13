@@ -31,10 +31,12 @@ const dashboardItems: Record<string, NavItem[]> = {
     { to: "/settings", icon: "fas fa-cog", label: "Settings" },
   ],
   COACH: [
-    { to: "/coach", icon: "fas fa-home", label: "Dashboard" },
-    { to: "/settings", icon: "fas fa-user-circle", label: "My Profile" },
-    { to: "/coach/submissions", icon: "fas fa-inbox", label: "Video Reviews" },
-    { to: "/library", icon: "fas fa-video", label: "Library" },
+    { to: "/coach",             icon: "fas fa-home",         label: "Dashboard" },
+    { to: "/coach/submissions", icon: "fas fa-inbox",        label: "Video Reviews" },
+    { to: "/coach/messages",    icon: "fas fa-comments",     label: "Messages" },
+    { to: "/coach/content",     icon: "fas fa-photo-video",  label: "My Content" },
+    { to: "/library",           icon: "fas fa-video",        label: "Library" },
+    { to: "/coach/settings",    icon: "fas fa-cog",          label: "Settings" },
   ],
  ADMIN: [
   { to: "/admin", icon: "fas fa-home", label: "Dashboard" },

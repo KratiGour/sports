@@ -1,4 +1,4 @@
-# Cricket Analytics & Highlight Platform
+# Cricket Analytics & Highlight Platform 
 
 A full-stack cloud-native web application that analyzes cricket videos, detects highlight events (4s, 6s, wickets) using OCR, and provides advanced AI-driven player biomechanics analysis (batting and bowling).
 
@@ -12,7 +12,7 @@ A full-stack cloud-native web application that analyzes cricket videos, detects 
 - ✂️ **Supercut Generation** - Automatically create highlight reels from detected events via zero-copy `FFmpeg`.
 - 🤖 **Player Biomechanics Analysis** - MediaPipe Pose Landmarker integration for batting stances and bowling action.
 - 👨‍🏫 **Coach Portal** - Dedicated UI for coaches to review student submissions frame-by-frame.
-
+ 
 ---
 
 ## 📁 GitHub Repository Details (Structure)
