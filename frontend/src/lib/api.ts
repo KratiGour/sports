@@ -622,4 +622,39 @@ export const adminApi = {
     api.get('/admin/activity', { params: { limit } }),
 };
 
+// Coach Content API
+export interface CoachContentItem {
+  id: string;
+  coach_id: string;
+  content_type: 'image' | 'video' | 'article';
+  title: string;
+  description: string | null;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  article_body: string | null;
+  thumbnail_url: string | null;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export const coachContentApi = {
+  list: (content_type?: string) =>
+    api.get<{ content: CoachContentItem[]; total: number }>('/coach/content/', { params: content_type ? { content_type } : {} }),
+  upload: (formData: FormData, onProgress?: (p: number) => void) =>
+    api.post<CoachContentItem>('/coach/content/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+      onUploadProgress: (e) => { if (e.total && onProgress) onProgress(Math.round((e.loaded * 100) / e.total)); },
+    }),
+  createArticle: (data: { title: string; description?: string; article_body: string; is_public?: boolean }) =>
+    api.post<CoachContentItem>('/coach/content/article', data),
+  update: (id: string, data: { title?: string; description?: string; article_body?: string; is_public?: boolean }) =>
+    api.put<CoachContentItem>(`/coach/content/${id}`, data),
+  delete: (id: string) => api.delete(`/coach/content/${id}`),
+  toggleVisibility: (id: string) => api.patch<{ id: string; is_public: boolean }>(`/coach/content/${id}/visibility`),
+};
+
 export default api;
