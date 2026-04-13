@@ -34,6 +34,7 @@ import FeaturesDetailPage from './pages/FeaturesDetailPage';
 import StatsPage from './pages/PlayerStatsPage';
 import MatchesPage from './pages/MatchesPage';
 import NotificationsPage from './pages/NotificationsPage';
+import CoachContentPage from './pages/CoachContentPage';
 
 // Auth Initializer (runs once on module load) 
 let authInitialized = false;
@@ -207,6 +208,7 @@ export default function AppRouter() {
                 <Route path="/coach/player/:id" element={<PlayerPerformance />} />
                 <Route path="/coach/submissions" element={<CoachInboxPage />} />
                 <Route path="/coach/submissions/:submissionId/review" element={<CoachReviewPage />} />
+                <Route path="/coach/content" element={<CoachContentPage />} />
               </Route>
             </Route>
           </Route>

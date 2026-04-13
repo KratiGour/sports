@@ -16,6 +16,7 @@ from database.models import (
     Video, HighlightEvent, HighlightJob, MatchRequest, UserVote,
     BattingAnalysis,
     VideoSubmission,
+    CoachContent,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -100,6 +101,7 @@ if not _CLOUD_RUN:
         "storage/temp_frames",
         "storage/coach_documents",
         "storage/coach_intro_videos",
+        "storage/coach_content",
     ]
     for dir_path in STORAGE_DIRS:
         Path(dir_path).mkdir(parents=True, exist_ok=True)
@@ -162,6 +164,7 @@ if not ALLOWED_ORIGINS or ALLOWED_ORIGINS == [""]:
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "https://sports-teal-two.vercel.app",  # Vercel production frontend
+        "https://sports-l8at.vercel.app",        # Fork deployment
     ]
     # Append additional production frontend URL from env if set
     _frontend = os.getenv("FRONTEND_URL", "").strip()
@@ -197,6 +200,7 @@ if not _CLOUD_RUN:
     app.mount("/static/temp_frames", StaticFiles(directory="storage/temp_frames"), name="temp_frames")
     app.mount("/static/coach_documents", StaticFiles(directory="storage/coach_documents"), name="coach_documents")
     app.mount("/static/coach_intro_videos", StaticFiles(directory="storage/coach_intro_videos"), name="coach_intro_videos")
+    app.mount("/static/coach_content", StaticFiles(directory="storage/coach_content"), name="coach_content")
 
 
 # Health Check Endpoints 
@@ -233,6 +237,7 @@ def db_health_check():
 # Include API Routers 
 from api.routes import auth, videos, jobs, requests, player_stats, bowling, BOWLING_AVAILABLE, batting, BATTING_AVAILABLE, submissions, SUBMISSIONS_AVAILABLE, storage, GCS_AVAILABLE, worker, WORKER_AVAILABLE, admin_coaches
 from api.routes import plan, subscription
+from api.routes import coach_content as coach_content_route
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
@@ -241,6 +246,7 @@ app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
 app.include_router(admin_coaches.router, prefix="/api/v1", tags=["admin"])
 app.include_router(plan.router, prefix="/api/v1", tags=["admin"])
 app.include_router(subscription.router, prefix="/api/v1", tags=["subscriptions"])
+app.include_router(coach_content_route.router, prefix="/api/v1", tags=["coach-content"])
 
 from api.routes import admin as admin_users
 app.include_router(admin_users.router, prefix="/api/v1", tags=["admin"])
